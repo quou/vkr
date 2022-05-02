@@ -52,6 +52,8 @@ namespace vkr {
 	class VKR_API VideoContext {
 	private:
 		impl_VideoContext* handle;
+
+		bool validation_layers_supported();
 	public:
 		VideoContext(const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions);
 		~VideoContext();
