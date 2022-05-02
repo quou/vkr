@@ -1,0 +1,49 @@
+# Swap
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+
+project
+
+# Session
+Session.vim
+Sessionx.vim
+
+premake5.exe
+*.bak
+# Temporary
+.netrwhist
+*~
+# Auto-generated tag files
+tags
+# Persistent undo
+[._]*.un~
+*.dll
+*.lib
+*.so
+bin
+obj
+tags
+Makefile
+res.pck
+tags
+*.dll
+*.exe
+*.so
+*.sln
+*.cbp
+*.layout
+*.vcxproj
+*.filters
+*.user
+*.vs
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+*.tiled-session
+.vscode
