@@ -14,6 +14,10 @@ namespace vkr {
 		"VK_LAYER_KHRONOS_validation"
 	};
 
+	static const char* device_extensions[] = {
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME
+	};
+
 	/* Lists the different types of queues that a device has to offer. */
 	struct QueueFamilies {
 		std::optional<u32> graphics;
@@ -48,6 +52,35 @@ namespace vkr {
 		return r;
 	}
 
+	static bool device_supports_extensions(VkPhysicalDevice device) {
+		u32 avail_ext_count;
+		vkEnumerateDeviceExtensionProperties(device, null, &avail_ext_count, null);
+
+		auto avail_exts = new VkExtensionProperties[avail_ext_count];
+
+		vkEnumerateDeviceExtensionProperties(device, null, &avail_ext_count, avail_exts);
+
+		for (u32 i = 0; i < sizeof(device_extensions) / sizeof(*device_extensions); i++) {
+			bool found = false;
+
+			for (u32 ii = 0; ii < avail_ext_count; ii++) {
+				if (strcmp(device_extensions[i], avail_exts[ii].extensionName) == 0) {
+					found = true;
+					break;
+				}
+			}
+
+			if (!found) {
+				delete[] avail_exts;
+				return false;
+			}
+		}
+
+		delete[] avail_exts;
+
+		return true;
+	}
+
 	static VkPhysicalDevice first_suitable_device(VkPhysicalDevice* devices, u32 device_count, impl_VideoContext* handle) {
 		for (u32 i = 0; i < device_count; i++) {
 			auto device = devices[i];
@@ -64,7 +97,7 @@ namespace vkr {
 			if (
 					(props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
 					props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) &&
-
+					device_supports_extensions(device) &&
 					qfs.graphics.has_value() && qfs.present.has_value()) {
 				info("Selected physical device: %s.", props.deviceName);
 				return device;
@@ -131,7 +164,6 @@ namespace vkr {
 		VkResult r;
 		if ((r = vkCreateInstance(&create_info, null, &handle->instance)) != VK_SUCCESS) {
 			error("vkCreateInstance failed with code %d.", r);
-			info("vkCreateInstance commonly fails because your hardware doesn't support Vulkan. Check that your driver is up to date.");
 			abort_with("Failed to create Vulkan instance.");
 		}
 
@@ -183,6 +215,8 @@ namespace vkr {
 		device_create_info.pQueueCreateInfos = &queue_create_infos[0];
 		device_create_info.queueCreateInfoCount = (u32)queue_create_infos.size();
 		device_create_info.pEnabledFeatures = &device_features;
+		device_create_info.enabledExtensionCount = sizeof(device_extensions) / sizeof(*device_extensions);
+		device_create_info.ppEnabledExtensionNames = device_extensions;
 
 		if (vkCreateDevice(handle->pdevice, &device_create_info, null, &handle->device) != VK_SUCCESS) {
 			abort_with("Failed to create a Vulkan device.");
