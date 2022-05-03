@@ -1,3 +1,5 @@
+#include <optional>
+
 #include <string.h>
 
 #include <vulkan/vulkan.h>
@@ -14,6 +16,33 @@ namespace vkr {
 		VkPhysicalDevice device;
 	};
 
+	/* Lists the different types of queues that a device has to offer. */
+	struct QueueFamilies {
+		std::optional<u32> graphics;
+	};
+
+	static QueueFamilies get_queue_families(VkPhysicalDevice device) {
+		QueueFamilies r;
+
+		u32 family_count = 0;
+
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, null);
+
+		auto families = new VkQueueFamilyProperties[family_count];
+
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &family_count, families);
+
+		for (u32 i = 0; i < family_count; i++) {
+			if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+				r.graphics = i;
+			}
+		}
+
+		delete[] families;
+
+		return r;
+	}
+
 	static VkPhysicalDevice first_suitable_device(VkPhysicalDevice* devices, u32 device_count) {
 		for (u32 i = 0; i < device_count; i++) {
 			auto device = devices[i];
@@ -23,9 +52,16 @@ namespace vkr {
 			vkGetPhysicalDeviceProperties(device, &props);
 			vkGetPhysicalDeviceFeatures(device, &features);
 
+			auto qfs = get_queue_families(device);
+
+			/* For a graphics device to be suitable, it must be a GPU and
+			 * have a queue capable of executing graphical commands. */
 			if (
-					props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
-					props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) {
+					(props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
+					props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) &&
+
+					qfs.graphics.has_value()) {
+				info("Selected physical device: %s.", props.deviceName);
 				return device;
 			}
 		}
