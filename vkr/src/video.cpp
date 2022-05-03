@@ -322,6 +322,9 @@ namespace vkr {
 		VkPresentModeKHR present_mode = choose_swap_present_mode(scc.present_mode_count, scc.present_modes);
 		VkExtent2D extent = choose_swap_extent(app, scc.capabilities);
 
+		handle->swapchain_format = surface_format.format;
+		handle->swapchain_extent = extent;
+
 		/* Acquire one more image than the minimum if possible so that
 		 * we don't end up waiting for the driver to give us another image. */
 		u32 image_count = scc.capabilities.minImageCount;
@@ -361,8 +364,13 @@ namespace vkr {
 		swap_create_info.oldSwapchain = VK_NULL_HANDLE;
 
 		if (vkCreateSwapchainKHR(handle->device, &swap_create_info, null, &handle->swapchain) != VK_SUCCESS) {
-			abort_with("Failed to create swap chain.");
+			abort_with("Failed to create swapchain.");
 		}
+
+		/* Acquire handles to the swapchain images. */
+		vkGetSwapchainImagesKHR(handle->device, handle->swapchain, &handle->swapchain_image_count, null);
+		handle->swapchain_images = new VkImage[handle->swapchain_image_count];
+		vkGetSwapchainImagesKHR(handle->device, handle->swapchain, &handle->swapchain_image_count, handle->swapchain_images);
 	}
 
 	VideoContext::~VideoContext() {
@@ -370,6 +378,9 @@ namespace vkr {
 		vkDestroyDevice(handle->device, null);
 		vkDestroySurfaceKHR(handle->instance, handle->surface, null);
 		vkDestroyInstance(handle->instance, null);
+
+		delete[] handle->swapchain_images;
+
 		delete handle;
 	}
 };
