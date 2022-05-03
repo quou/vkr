@@ -11,13 +11,33 @@ namespace vkr {
 
 	struct impl_VideoContext {
 		VkInstance instance;
+		VkPhysicalDevice device;
 	};
+
+	static VkPhysicalDevice first_suitable_device(VkPhysicalDevice* devices, u32 device_count) {
+		for (u32 i = 0; i < device_count; i++) {
+			auto device = devices[i];
+
+			VkPhysicalDeviceProperties props;
+			VkPhysicalDeviceFeatures features;
+			vkGetPhysicalDeviceProperties(device, &props);
+			vkGetPhysicalDeviceFeatures(device, &features);
+
+			if (
+					props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
+					props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) {
+				return device;
+			}
+		}
+
+		return VK_NULL_HANDLE;
+	}
 
 	bool VideoContext::validation_layers_supported() {
 		u32 avail_count;
 		vkEnumerateInstanceLayerProperties(&avail_count, null);
 
-		VkLayerProperties* avail_layers = new VkLayerProperties[avail_count];
+		auto avail_layers = new VkLayerProperties[avail_count];
 
 		vkEnumerateInstanceLayerProperties(&avail_count, avail_layers);
 
@@ -75,6 +95,28 @@ namespace vkr {
 		}
 
 		info("Vulkan instance created.");
+
+		handle->device = VK_NULL_HANDLE;
+
+		u32 device_count = 0;
+		vkEnumeratePhysicalDevices(handle->instance, &device_count, null);
+
+		if (device_count == 0) {
+			abort_with("No Vulkan-capable graphics hardware is installed in this machine.\n");
+		}
+
+		auto devices = new VkPhysicalDevice[device_count];
+
+		vkEnumeratePhysicalDevices(handle->instance, &device_count, devices);
+
+		VkPhysicalDevice device = first_suitable_device(devices, device_count);
+		if (device == VK_NULL_HANDLE) {
+			error("first_suitable_device() failed.");
+			info("Vulkan-capable hardware exists, but it does not support the required features.");
+			abort_with("Failed to find a suitable graphics device.");
+		}
+
+		delete[] devices;
 	}
 
 	VideoContext::~VideoContext() {
