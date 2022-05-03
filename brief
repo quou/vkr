@@ -1,0 +1,30 @@
+Vulkan Renderer
+
+The modular system is to be a real-time 3-D renderer that makes
+use of the Vulkan API. It will include the following features:
+ - Wavefront loading.
+ - 3-D lighting including normal mapping and shadows.
+ - Simple post-processing effects such as Bloom.
+
+It will rely on GLFW for windowing and input. The rest is to be
+implemented from scratch in C++.
+
+The renderer will be built as a dynamic library/shared object, to
+be linked to a client application. This is so that any external
+libraries that the renderer relies on won't have to be linked into
+client applications as well, which would be the case if the renderer
+were linked to clients statically.
+
+The renderer will make use of various mathematical functions for
+3-D transformation including vector operations such as the dot
+and cross product and matrix operations like translation, rotation,
+scaling and projection matrices.
+
+The renderer will provide a base class for applications that clients
+inherit from which provides functionality like abstracting the GLFW
+windowing and input, as well as creating the Vulkan instance. The
+goal is for all Vulkan calls to be abstracted behind at least a thin
+object-oriented layer. For example, a "Mesh" class which will manage
+vertex and index buffers for the user that they can simply push data
+into and draw on command, or a "Scene" class that manages different
+meshes, post processing effects and lights.
