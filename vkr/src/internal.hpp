@@ -12,5 +12,7 @@ namespace vkr {
 		VkQueue present_queue;
 
 		VkSurfaceKHR surface;
+
+		VkSwapchainKHR swapchain;
 	};
 };

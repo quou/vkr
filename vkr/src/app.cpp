@@ -49,4 +49,8 @@ namespace vkr {
 	bool App::create_window_surface(const VideoContext& ctx) const {
 		return glfwCreateWindowSurface(ctx.handle->instance, handle->window, null, &ctx.handle->surface) == VK_SUCCESS;
 	}
+
+	v2i App::get_size() const {
+		return size;
+	}
 }

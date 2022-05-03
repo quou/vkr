@@ -51,6 +51,8 @@ namespace vkr {
 		virtual ~App() {};
 
 		void run();
+
+		v2i get_size() const;
 	};
 
 	class VKR_API VideoContext {
