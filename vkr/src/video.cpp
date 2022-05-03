@@ -13,7 +13,10 @@ namespace vkr {
 
 	struct impl_VideoContext {
 		VkInstance instance;
-		VkPhysicalDevice device;
+		VkPhysicalDevice pdevice;
+		VkDevice device;
+
+		VkQueue graphics_queue;
 	};
 
 	/* Lists the different types of queues that a device has to offer. */
@@ -132,8 +135,6 @@ namespace vkr {
 
 		info("Vulkan instance created.");
 
-		handle->device = VK_NULL_HANDLE;
-
 		u32 device_count = 0;
 		vkEnumeratePhysicalDevices(handle->instance, &device_count, null);
 
@@ -145,17 +146,42 @@ namespace vkr {
 
 		vkEnumeratePhysicalDevices(handle->instance, &device_count, devices);
 
-		VkPhysicalDevice device = first_suitable_device(devices, device_count);
-		if (device == VK_NULL_HANDLE) {
+		handle->pdevice = first_suitable_device(devices, device_count);
+		if (handle->pdevice == VK_NULL_HANDLE) {
 			error("first_suitable_device() failed.");
 			info("Vulkan-capable hardware exists, but it does not support the required features.");
 			abort_with("Failed to find a suitable graphics device.");
 		}
 
+		auto qfs = get_queue_families(handle->pdevice);
+
+		f32 queue_priorities[] = { 1.0f };
+
+		VkDeviceQueueCreateInfo queue_create_info{};
+		queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queue_create_info.queueFamilyIndex = qfs.graphics.value();
+		queue_create_info.queueCount = 1;
+		queue_create_info.pQueuePriorities = queue_priorities;
+
+		VkPhysicalDeviceFeatures device_features{};
+
+		VkDeviceCreateInfo device_create_info{};
+		device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+		device_create_info.pQueueCreateInfos = &queue_create_info;
+		device_create_info.queueCreateInfoCount = 1;
+		device_create_info.pEnabledFeatures = &device_features;
+
+		if (vkCreateDevice(handle->pdevice, &device_create_info, null, &handle->device) != VK_SUCCESS) {
+			abort_with("Failed to create a Vulkan device.");
+		}
+
+		vkGetDeviceQueue(handle->device, qfs.graphics.value(), 0, &handle->graphics_queue);
+
 		delete[] devices;
 	}
 
 	VideoContext::~VideoContext() {
+		vkDestroyDevice(handle->device, null);
 		vkDestroyInstance(handle->instance, null);
 		delete handle;
 	}
