@@ -15,10 +15,13 @@ namespace vkr {
 
 		VkSurfaceKHR surface;
 
+		/* Swapchain */
 		VkSwapchainKHR swapchain;
-		VkImage* swapchain_images;
+		
 		u32 swapchain_image_count;
-
+		VkImage* swapchain_images;
+		VkImageView* swapchain_image_views;
+		
 		VkFormat swapchain_format;
 		VkExtent2D swapchain_extent;
 	};

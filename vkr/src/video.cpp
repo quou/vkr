@@ -371,15 +371,46 @@ namespace vkr {
 		vkGetSwapchainImagesKHR(handle->device, handle->swapchain, &handle->swapchain_image_count, null);
 		handle->swapchain_images = new VkImage[handle->swapchain_image_count];
 		vkGetSwapchainImagesKHR(handle->device, handle->swapchain, &handle->swapchain_image_count, handle->swapchain_images);
+
+		handle->swapchain_image_views = new VkImageView[handle->swapchain_image_count];
+
+		/* Create image views. */
+		for (u32 i = 0; i < handle->swapchain_image_count; i++) {
+			VkImageViewCreateInfo iv_create_info{};
+			iv_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			iv_create_info.image = handle->swapchain_images[i];
+
+			iv_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			iv_create_info.format = handle->swapchain_format;
+			iv_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+			iv_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+			iv_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+			iv_create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+			iv_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			iv_create_info.subresourceRange.baseMipLevel = 0;
+			iv_create_info.subresourceRange.levelCount = 1;
+			iv_create_info.subresourceRange.baseArrayLayer = 0;
+			iv_create_info.subresourceRange.layerCount = 1;
+
+			if (vkCreateImageView(handle->device, &iv_create_info, null, &handle->swapchain_image_views[i]) != VK_SUCCESS) {
+				abort_with("Failed to create image view!");
+			}
+		}
 	}
 
 	VideoContext::~VideoContext() {
+		for (u32 i = 0; i < handle->swapchain_image_count; i++) {
+			vkDestroyImageView(handle->device, handle->swapchain_image_views[i], null);
+		}
+
 		vkDestroySwapchainKHR(handle->device, handle->swapchain, null);
 		vkDestroyDevice(handle->device, null);
 		vkDestroySurfaceKHR(handle->instance, handle->surface, null);
 		vkDestroyInstance(handle->instance, null);
 
 		delete[] handle->swapchain_images;
+		delete[] handle->swapchain_image_views;
 
 		delete handle;
 	}
