@@ -1,30 +1,26 @@
 #include <optional>
+#include <set>
+#include <vector>
 
 #include <string.h>
 
 #include <vulkan/vulkan.h>
 
 #include "vkr.hpp"
+#include "internal.hpp"
 
 namespace vkr {
 	static const char* validation_layers[] = {
 		"VK_LAYER_KHRONOS_validation"
 	};
 
-	struct impl_VideoContext {
-		VkInstance instance;
-		VkPhysicalDevice pdevice;
-		VkDevice device;
-
-		VkQueue graphics_queue;
-	};
-
 	/* Lists the different types of queues that a device has to offer. */
 	struct QueueFamilies {
 		std::optional<u32> graphics;
+		std::optional<u32> present;
 	};
 
-	static QueueFamilies get_queue_families(VkPhysicalDevice device) {
+	static QueueFamilies get_queue_families(VkPhysicalDevice device, impl_VideoContext* handle) {
 		QueueFamilies r;
 
 		u32 family_count = 0;
@@ -39,6 +35,12 @@ namespace vkr {
 			if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
 				r.graphics = i;
 			}
+
+			VkBool32 supports_presentation = false;
+			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, handle->surface, &supports_presentation);
+			if (supports_presentation) {
+				r.present = i;
+			}
 		}
 
 		delete[] families;
@@ -46,7 +48,7 @@ namespace vkr {
 		return r;
 	}
 
-	static VkPhysicalDevice first_suitable_device(VkPhysicalDevice* devices, u32 device_count) {
+	static VkPhysicalDevice first_suitable_device(VkPhysicalDevice* devices, u32 device_count, impl_VideoContext* handle) {
 		for (u32 i = 0; i < device_count; i++) {
 			auto device = devices[i];
 
@@ -55,7 +57,7 @@ namespace vkr {
 			vkGetPhysicalDeviceProperties(device, &props);
 			vkGetPhysicalDeviceFeatures(device, &features);
 
-			auto qfs = get_queue_families(device);
+			auto qfs = get_queue_families(device, handle);
 
 			/* For a graphics device to be suitable, it must be a GPU and
 			 * have a queue capable of executing graphical commands. */
@@ -63,7 +65,7 @@ namespace vkr {
 					(props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
 					props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) &&
 
-					qfs.graphics.has_value()) {
+					qfs.graphics.has_value() && qfs.present.has_value()) {
 				info("Selected physical device: %s.", props.deviceName);
 				return device;
 			}
@@ -103,7 +105,7 @@ namespace vkr {
 		return true;
 	}
 
-	VideoContext::VideoContext(const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions) {
+	VideoContext::VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions) {
 		handle = new impl_VideoContext();
 
 		if (enable_validation_layers && !validation_layers_supported()) {
@@ -135,6 +137,12 @@ namespace vkr {
 
 		info("Vulkan instance created.");
 
+		/* Create the window surface */
+		if (!app.create_window_surface(*this)) {
+			abort_with("Failed to create a window surface.");
+		}
+
+		/* Create the device. */
 		u32 device_count = 0;
 		vkEnumeratePhysicalDevices(handle->instance, &device_count, null);
 
@@ -146,29 +154,34 @@ namespace vkr {
 
 		vkEnumeratePhysicalDevices(handle->instance, &device_count, devices);
 
-		handle->pdevice = first_suitable_device(devices, device_count);
+		handle->pdevice = first_suitable_device(devices, device_count, handle);
 		if (handle->pdevice == VK_NULL_HANDLE) {
 			error("first_suitable_device() failed.");
 			info("Vulkan-capable hardware exists, but it does not support the required features.");
 			abort_with("Failed to find a suitable graphics device.");
 		}
 
-		auto qfs = get_queue_families(handle->pdevice);
+		auto qfs = get_queue_families(handle->pdevice, handle);
 
-		f32 queue_priorities[] = { 1.0f };
+		std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
+		std::set<u32> unique_queue_families = { qfs.graphics.value(), qfs.present.value() };
 
-		VkDeviceQueueCreateInfo queue_create_info{};
-		queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queue_create_info.queueFamilyIndex = qfs.graphics.value();
-		queue_create_info.queueCount = 1;
-		queue_create_info.pQueuePriorities = queue_priorities;
+		f32 queue_priority = 1.0f;
+		for (u32 f : unique_queue_families) {
+			VkDeviceQueueCreateInfo queue_create_info{};
+			queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+			queue_create_info.queueFamilyIndex = f;
+			queue_create_info.queueCount = 1;
+			queue_create_info.pQueuePriorities = &queue_priority;
+			queue_create_infos.push_back(queue_create_info);
+		}
 
 		VkPhysicalDeviceFeatures device_features{};
 
 		VkDeviceCreateInfo device_create_info{};
 		device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-		device_create_info.pQueueCreateInfos = &queue_create_info;
-		device_create_info.queueCreateInfoCount = 1;
+		device_create_info.pQueueCreateInfos = &queue_create_infos[0];
+		device_create_info.queueCreateInfoCount = (u32)queue_create_infos.size();
 		device_create_info.pEnabledFeatures = &device_features;
 
 		if (vkCreateDevice(handle->pdevice, &device_create_info, null, &handle->device) != VK_SUCCESS) {
@@ -176,12 +189,14 @@ namespace vkr {
 		}
 
 		vkGetDeviceQueue(handle->device, qfs.graphics.value(), 0, &handle->graphics_queue);
+		vkGetDeviceQueue(handle->device, qfs.present.value(), 0, &handle->present_queue);
 
 		delete[] devices;
 	}
 
 	VideoContext::~VideoContext() {
 		vkDestroyDevice(handle->device, null);
+		vkDestroySurfaceKHR(handle->instance, handle->surface, null);
 		vkDestroyInstance(handle->instance, null);
 		delete handle;
 	}

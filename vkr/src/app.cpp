@@ -1,6 +1,7 @@
 #include <GLFW/glfw3.h>
 
 #include "vkr.hpp"
+#include "internal.hpp"
 
 namespace vkr {
 	struct impl_App {
@@ -28,12 +29,12 @@ namespace vkr {
 		u32 ext_count = 0;
 		const char** exts = glfwGetRequiredInstanceExtensions(&ext_count);
 
-		video = new VideoContext(title, enable_validation_layers, ext_count, exts);
-
 		handle->window = glfwCreateWindow(size.x, size.y, title, null, null);
 		if (!handle->window) {
 			abort_with("Failed to create window.");
 		}
+
+		video = new VideoContext(*this, title, enable_validation_layers, ext_count, exts);
 
 		while (!glfwWindowShouldClose(handle->window)) {
 			glfwPollEvents();
@@ -43,5 +44,9 @@ namespace vkr {
 
 		delete video;
 		delete handle;
+	}
+
+	bool App::create_window_surface(const VideoContext& ctx) const {
+		return glfwCreateWindowSurface(ctx.handle->instance, handle->window, null, &ctx.handle->surface) == VK_SUCCESS;
 	}
 }

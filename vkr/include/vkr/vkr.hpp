@@ -37,6 +37,10 @@ namespace vkr {
 
 		const char* title;
 		v2i size;
+
+		bool create_window_surface(const VideoContext& ctx) const;
+
+		friend class VideoContext;
 	public:
 		App(const char* title, v2i size);
 
@@ -51,11 +55,11 @@ namespace vkr {
 
 	class VKR_API VideoContext {
 	private:
-		impl_VideoContext* handle;
-
 		bool validation_layers_supported();
 	public:
-		VideoContext(const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions);
+		impl_VideoContext* handle;
+
+		VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions);
 		~VideoContext();
 	};
 };

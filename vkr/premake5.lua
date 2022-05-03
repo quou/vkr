@@ -28,7 +28,7 @@ project "vkr"
 
 	defines {
 		"VKR_EXPORT_SYMBOLS",
-		"GLFW_INCLUDE_NONE"
+		"GLFW_INCLUDE_VULKAN"
 	}
 
 	links {
