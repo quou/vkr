@@ -36,13 +36,22 @@ namespace vkr {
 
 		video = new VideoContext(*this, title, enable_validation_layers, ext_count, exts);
 
+		on_init();
+
 		while (!glfwWindowShouldClose(handle->window)) {
 			glfwPollEvents();
+
+			on_update(1.0);
 		}
+
+		on_deinit();
+
+		glfwDestroyWindow(handle->window);
+
+		delete video;
 
 		glfwTerminate();
 
-		delete video;
 		delete handle;
 	}
 

@@ -55,4 +55,54 @@ namespace vkr {
 		verror(fmt, args);
 		exit(1);
 	}
+
+	bool read_raw(const char* path, u8** buffer, usize* size) {
+		FILE* file = fopen(path, "rb");
+		if (!file) {
+			error("Failed to fopen `%s' for reading.", path);
+			return false;
+		}
+
+		fseek(file, 0, SEEK_END);
+		usize file_size = ftell(file);
+		fseek(file, 0, SEEK_SET);
+
+		*size = file_size;
+
+		*buffer = new u8[file_size];
+		if (fread(*buffer, 1, file_size, file) < file_size) {
+			warning("Couldn't read all of `%s'.", path);
+		}
+
+		return true;
+	}
+
+	bool read_raw_text(const char* path, char** buffer) {
+		FILE* file = fopen(path, "r");
+		if (!file) {
+			error("Failed to fopen `%s' for reading.", path);
+			return false;
+		}
+
+		fseek(file, 0, SEEK_END);
+		usize file_size = ftell(file);
+		fseek(file, 0, SEEK_SET);
+
+		*buffer = new char[file_size + 1];
+		if (fread(*buffer, 1, file_size, file) < file_size) {
+			warning("Couldn't read all of `%s'.", path);
+		}
+
+		(*buffer)[file_size] = '\0';
+
+		return true;
+	}
+
+	bool write_raw(const char* path, u8* buffer, usize* size) {
+		return false;
+	}
+
+	bool write_raw_text(const char* path, char* buffer) {
+		return false;
+	}
 }

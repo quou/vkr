@@ -17,11 +17,17 @@ namespace vkr {
 	VKR_API void vinfo(const char* fmt, va_list args);
 	VKR_API void vabort_with(const char* fmt, va_list args);
 
+	VKR_API bool read_raw(const char* path, u8** buffer, usize* size);
+	VKR_API bool read_raw_text(const char* path, char** buffer);
+	VKR_API bool write_raw(const char* path, u8* buffer, usize* size);
+	VKR_API bool write_raw_text(const char* path, char* buffer);
+
 	/* These structures are for storing information about the
 	 * state of a class wrapper that might rely on external headers,
 	 * namely glfw3.h and vulkan.h. */
 	struct impl_App;
 	struct impl_VideoContext;
+	struct impl_Pipeline;
 
 	/* Class forward declarations. */
 	class App;
@@ -33,14 +39,14 @@ namespace vkr {
 	private:
 		impl_App* handle;
 
-		VideoContext* video;
-
 		const char* title;
 		v2i size;
 
 		bool create_window_surface(const VideoContext& ctx) const;
 
 		friend class VideoContext;
+	protected:
+		VideoContext* video;
 	public:
 		App(const char* title, v2i size);
 
@@ -53,6 +59,14 @@ namespace vkr {
 		void run();
 
 		v2i get_size() const;
+	};
+
+	class VKR_API Pipeline {
+	private:
+		impl_Pipeline* handle;
+	public:
+		Pipeline(const VideoContext* video);
+		~Pipeline();
 	};
 
 	class VKR_API VideoContext {

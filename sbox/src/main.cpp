@@ -4,12 +4,20 @@
 
 class SandboxApp : public vkr::App {
 private:
+	vkr::Pipeline* pipeline;
 public:
 	SandboxApp() : App("Sandbox", vkr::v2i(800, 600)) {
 	}
 
 	void on_init() override {
+		pipeline = new vkr::Pipeline(video);
 
+		char* buf;
+		if (vkr::read_raw_text("sbox/src/main.cpp", &buf)) {
+			printf("%s", (char*)buf);
+		}
+
+		delete[] buf;
 	}
 
 	void on_update(vkr::f64 ts) override {
@@ -17,7 +25,7 @@ public:
 	}
 
 	void on_deinit() override {
-
+		delete pipeline;
 	}
 };
 
