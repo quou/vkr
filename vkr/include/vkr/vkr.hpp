@@ -73,10 +73,16 @@ namespace vkr {
 	class VKR_API VideoContext {
 	private:
 		bool validation_layers_supported();
+		void record_commands(u32 image);
 	public:
 		impl_VideoContext* handle;
 
 		VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions);
 		~VideoContext();
+
+		void draw();
+
+		/* Waits for all the current operations to finish. */
+		void wait_for_done() const;
 	};
 };

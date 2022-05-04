@@ -434,12 +434,22 @@ namespace vkr {
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &color_attachment_ref;
 
+		VkSubpassDependency dep{};
+		dep.srcSubpass = VK_SUBPASS_EXTERNAL;
+		dep.dstSubpass = 0;
+		dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dep.srcAccessMask = 0;
+		dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
 		VkRenderPassCreateInfo render_pass_info{};
 		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 		render_pass_info.attachmentCount = 1;
 		render_pass_info.pAttachments = &color_attachment;
 		render_pass_info.subpassCount = 1;
 		render_pass_info.pSubpasses = &subpass;
+		render_pass_info.dependencyCount = 1;
+		render_pass_info.pDependencies = &dep;
 
 		if (vkCreateRenderPass(handle->device, &render_pass_info, null, &handle->render_pass)) {
 			abort_with("Failed to create render pass.");
@@ -606,9 +616,27 @@ namespace vkr {
 		if (vkAllocateCommandBuffers(handle->device, &cb_alloc_info, &handle->command_buffer) != VK_SUCCESS) {
 			abort_with("Failed to allocate command buffers.");
 		}
+
+		/* Create the syncronisation objects. */
+		VkSemaphoreCreateInfo semaphore_info{};
+		semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+		VkFenceCreateInfo fence_info{};
+		fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+		if (vkCreateSemaphore(handle->device, &semaphore_info, null, &handle->image_avail_semaphore)   != VK_SUCCESS ||
+			vkCreateSemaphore(handle->device, &semaphore_info, null, &handle->render_finish_semaphore) != VK_SUCCESS ||
+			vkCreateFence(handle->device, &fence_info, null, &handle->in_flight_fence)) {
+			abort_with("Failed to create syncronisation objects.");
+		}
 	}
 
 	VideoContext::~VideoContext() {
+		vkDestroySemaphore(handle->device, handle->image_avail_semaphore, null);
+		vkDestroySemaphore(handle->device, handle->render_finish_semaphore, null);
+		vkDestroyFence(handle->device, handle->in_flight_fence, null);
+
 		vkDestroyCommandPool(handle->device, handle->command_pool, null);
 
 		for (u32 i = 0; i < handle->swapchain_image_count; i++) {
@@ -633,5 +661,84 @@ namespace vkr {
 		delete[] handle->swapchain_framebuffers;
 
 		delete handle;
+	}
+
+	void VideoContext::record_commands(u32 image) {
+		VkCommandBufferBeginInfo begin_info{};
+		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+		if (vkBeginCommandBuffer(handle->command_buffer, &begin_info) != VK_SUCCESS) {
+			warning("Failed to begin the command buffer.");
+			return;
+		}
+
+		VkRenderPassBeginInfo render_pass_info{};
+		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		render_pass_info.renderPass = handle->render_pass;
+		render_pass_info.framebuffer = handle->swapchain_framebuffers[image];
+		render_pass_info.renderArea.offset = { 0, 0 };
+		render_pass_info.renderArea.extent = handle->swapchain_extent;
+
+		VkClearValue clear_color = { { { 0.0f, 0.0f, 0.0f, 1.0f } } };
+		render_pass_info.clearValueCount = 1;
+		render_pass_info.pClearValues = &clear_color;
+
+		vkCmdBeginRenderPass(handle->command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBindPipeline(handle->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, handle->pipeline);
+		vkCmdDraw(handle->command_buffer, 3, 1, 0, 0);
+		vkCmdEndRenderPass(handle->command_buffer);
+
+		if (vkEndCommandBuffer(handle->command_buffer) != VK_SUCCESS) {
+			warning("Failed to end the command buffer");
+			return;
+		}
+	}
+
+	void VideoContext::draw() {
+		vkWaitForFences(handle->device, 1, &handle->in_flight_fence, VK_TRUE, UINT64_MAX);
+		vkResetFences(handle->device, 1, &handle->in_flight_fence);
+
+		u32 image_id;
+		vkAcquireNextImageKHR(handle->device, handle->swapchain, UINT64_MAX, handle->image_avail_semaphore, VK_NULL_HANDLE, &image_id);
+
+		vkResetCommandBuffer(handle->command_buffer, 0);
+		record_commands(image_id);
+
+		VkSemaphore wait_semaphores[] = { handle->image_avail_semaphore };
+		VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+		VkSemaphore signal_semaphores[] = { handle->render_finish_semaphore };
+
+		VkSubmitInfo submit_info{};
+		submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submit_info.waitSemaphoreCount = 1;
+		submit_info.pWaitSemaphores = wait_semaphores;
+		submit_info.pWaitDstStageMask = wait_stages;
+		submit_info.commandBufferCount = 1;
+		submit_info.pCommandBuffers = &handle->command_buffer;
+		submit_info.signalSemaphoreCount = 1;
+		submit_info.pSignalSemaphores = signal_semaphores;
+
+		if (vkQueueSubmit(handle->graphics_queue, 1, &submit_info, handle->in_flight_fence) != VK_SUCCESS) {
+			warning("Failed to submit draw command buffer.");
+			return;
+		}
+
+		VkSwapchainKHR swapchains[] = { handle->swapchain };
+
+		VkPresentInfoKHR present_info{};
+		present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+		present_info.waitSemaphoreCount = 1;
+		present_info.pWaitSemaphores = signal_semaphores;
+		present_info.swapchainCount = 1;
+		present_info.pSwapchains = swapchains;
+		present_info.pImageIndices = &image_id;
+		present_info.pResults = null;
+
+		vkQueuePresentKHR(handle->present_queue, &present_info);
+	}
+
+	void VideoContext::wait_for_done() const {
+		vkDeviceWaitIdle(handle->device);
 	}
 };

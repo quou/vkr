@@ -14,7 +14,7 @@ public:
 	}
 
 	void on_update(vkr::f64 ts) override {
-
+		video->draw();
 	}
 
 	void on_deinit() override {

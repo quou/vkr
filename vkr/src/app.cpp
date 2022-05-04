@@ -46,6 +46,8 @@ namespace vkr {
 
 		on_deinit();
 
+		video->wait_for_done();
+
 		glfwDestroyWindow(handle->window);
 
 		delete video;

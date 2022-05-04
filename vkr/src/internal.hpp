@@ -36,6 +36,11 @@ namespace vkr {
 		/* Command buffer */
 		VkCommandPool command_pool;
 		VkCommandBuffer command_buffer;
+
+		/* Syncronisation. */
+		VkSemaphore image_avail_semaphore;   /* Signalled when an image has been acquired from the swapchain. */
+		VkSemaphore render_finish_semaphore; /* Signalled when the picture has finished rendering. */
+		VkFence in_flight_fence;             /* Waits for the last frame to finish. */
 	};
 
 	struct impl_Pipeline {
