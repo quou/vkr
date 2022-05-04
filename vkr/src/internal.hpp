@@ -32,6 +32,10 @@ namespace vkr {
 		VkRenderPass render_pass;
 		VkPipelineLayout pipeline_layout;
 		VkPipeline pipeline;
+
+		/* Command buffer */
+		VkCommandPool command_pool;
+		VkCommandBuffer command_buffer;
 	};
 
 	struct impl_Pipeline {

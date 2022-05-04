@@ -585,9 +585,32 @@ namespace vkr {
 				abort_with("Failed to create framebuffer.");
 			}
 		}
+
+		/* Create the command pool. */
+		VkCommandPoolCreateInfo pool_info{};
+		pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		pool_info.queueFamilyIndex = qfs.graphics.value();
+
+		if (vkCreateCommandPool(handle->device, &pool_info, null, &handle->command_pool) != VK_SUCCESS) {
+			abort_with("Failed to create command pool.");
+		}
+
+		/* Create the command buffer. */
+		VkCommandBufferAllocateInfo cb_alloc_info{};
+		cb_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		cb_alloc_info.commandPool = handle->command_pool;
+		cb_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		cb_alloc_info.commandBufferCount = 1;
+
+		if (vkAllocateCommandBuffers(handle->device, &cb_alloc_info, &handle->command_buffer) != VK_SUCCESS) {
+			abort_with("Failed to allocate command buffers.");
+		}
 	}
 
 	VideoContext::~VideoContext() {
+		vkDestroyCommandPool(handle->device, handle->command_pool, null);
+
 		for (u32 i = 0; i < handle->swapchain_image_count; i++) {
 			vkDestroyFramebuffer(handle->device, handle->swapchain_framebuffers[i], null);
 		}
