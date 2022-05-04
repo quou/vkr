@@ -47,3 +47,6 @@ tags
 
 *.tiled-session
 .vscode
+
+# SPIR-V output
+*.spv
