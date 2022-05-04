@@ -11,13 +11,6 @@ public:
 
 	void on_init() override {
 		pipeline = new vkr::Pipeline(video);
-
-		char* buf;
-		if (vkr::read_raw_text("sbox/src/main.cpp", &buf)) {
-			printf("%s", (char*)buf);
-		}
-
-		delete[] buf;
 	}
 
 	void on_update(vkr::f64 ts) override {

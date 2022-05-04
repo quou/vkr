@@ -227,6 +227,20 @@ namespace vkr {
 		return true;
 	}
 
+	static VkShaderModule new_shader_module(VkDevice device, u8* code, usize code_size) {
+		VkShaderModuleCreateInfo info{};
+		info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+		info.codeSize = code_size;
+		info.pCode = (u32*)code;
+
+		VkShaderModule m;
+		if (vkCreateShaderModule(device, &info, null, &m) != VK_SUCCESS) {
+			abort_with("Failed to create shader module.");
+		}
+
+		return m;
+	}
+
 	VideoContext::VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions) {
 		handle = new impl_VideoContext();
 
@@ -394,12 +408,97 @@ namespace vkr {
 			iv_create_info.subresourceRange.layerCount = 1;
 
 			if (vkCreateImageView(handle->device, &iv_create_info, null, &handle->swapchain_image_views[i]) != VK_SUCCESS) {
-				abort_with("Failed to create image view!");
+				abort_with("Failed to create image view.");
 			}
 		}
+
+		/* Create shaders and pipeline.
+		 *
+		 * TODO: Abstract this separately. */
+		u8* v_buf; usize v_size;
+		u8* f_buf; usize f_size;
+
+		read_raw("res/shaders/simple.vert.spv", &v_buf, &v_size);
+		read_raw("res/shaders/simple.frag.spv", &f_buf, &f_size);
+
+		VkShaderModule v_shader = new_shader_module(handle->device, v_buf, v_size);
+		VkShaderModule f_shader = new_shader_module(handle->device, f_buf, f_size);
+
+		delete[] v_buf;
+		delete[] f_buf;
+
+		VkPipelineShaderStageCreateInfo v_stage_info{};
+		v_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		v_stage_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
+		v_stage_info.module = v_shader;
+		v_stage_info.pName = "main";
+
+		VkPipelineShaderStageCreateInfo f_stage_info{};
+		f_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		f_stage_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		f_stage_info.module = f_shader;
+		f_stage_info.pName = "main";
+
+		VkPipelineShaderStageCreateInfo stages[] = { v_stage_info, f_stage_info };
+
+		VkPipelineVertexInputStateCreateInfo vertex_input_info{};
+		vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+		vertex_input_info.vertexBindingDescriptionCount = 0;
+		vertex_input_info.pVertexBindingDescriptions = null;
+		vertex_input_info.vertexAttributeDescriptionCount = 0;
+		vertex_input_info.pVertexAttributeDescriptions = null;
+
+		VkViewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width  = (f32)extent.width;
+		viewport.height = (f32)extent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		VkRect2D scissor{};
+		scissor.offset = { 0, 0 };
+		scissor.extent = extent;
+
+		VkPipelineViewportStateCreateInfo viewport_state{};
+		viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+		viewport_state.viewportCount = 1;
+		viewport_state.pViewports = &viewport;
+		viewport_state.scissorCount = 1;
+		viewport_state.pScissors = &scissor;
+
+		VkPipelineRasterizationStateCreateInfo rasteriser{};
+		rasteriser.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+		rasteriser.depthClampEnable = VK_FALSE;
+		rasteriser.rasterizerDiscardEnable = VK_FALSE;
+		rasteriser.polygonMode = VK_POLYGON_MODE_FILL;
+		rasteriser.lineWidth = 1.0f;
+		rasteriser.cullMode = VK_CULL_MODE_BACK_BIT;
+		rasteriser.frontFace = VK_FRONT_FACE_CLOCKWISE;
+		rasteriser.depthBiasEnable = VK_FALSE;
+
+		VkPipelineColorBlendAttachmentState color_blend_attachment{};
+		color_blend_attachment.colorWriteMask =
+			VK_COLOR_COMPONENT_R_BIT |
+			VK_COLOR_COMPONENT_G_BIT |
+			VK_COLOR_COMPONENT_B_BIT |
+			VK_COLOR_COMPONENT_A_BIT;
+		color_blend_attachment.blendEnable = VK_FALSE;
+
+		VkPipelineLayoutCreateInfo pipeline_layout_info{};
+		pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+
+		if (vkCreatePipelineLayout(handle->device, &pipeline_layout_info, null, &handle->pipeline_layout) != VK_SUCCESS) {
+			abort_with("Failed to create pipeline layout.");
+		}
+
+		vkDestroyShaderModule(handle->device, v_shader, null);
+		vkDestroyShaderModule(handle->device, f_shader, null);
 	}
 
 	VideoContext::~VideoContext() {
+		vkDestroyPipelineLayout(handle->device, handle->pipeline_layout, null);
+
 		for (u32 i = 0; i < handle->swapchain_image_count; i++) {
 			vkDestroyImageView(handle->device, handle->swapchain_image_views[i], null);
 		}

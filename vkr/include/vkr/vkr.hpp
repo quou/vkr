@@ -32,6 +32,7 @@ namespace vkr {
 	/* Class forward declarations. */
 	class App;
 	class VideoContext;
+	class Shader;
 
 	/* To be inherited by client applications to provide custom
 	 * functionality and data. */

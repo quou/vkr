@@ -24,6 +24,9 @@ namespace vkr {
 		
 		VkFormat swapchain_format;
 		VkExtent2D swapchain_extent;
+
+		/* Pipeline */
+		VkPipelineLayout pipeline_layout;
 	};
 
 	struct impl_Pipeline {
