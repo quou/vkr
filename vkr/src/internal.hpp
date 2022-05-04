@@ -25,8 +25,13 @@ namespace vkr {
 		VkFormat swapchain_format;
 		VkExtent2D swapchain_extent;
 
+		/* Framebuffers */
+		VkFramebuffer* swapchain_framebuffers;
+
 		/* Pipeline */
+		VkRenderPass render_pass;
 		VkPipelineLayout pipeline_layout;
+		VkPipeline pipeline;
 	};
 
 	struct impl_Pipeline {
