@@ -4,6 +4,8 @@
 
 #include "vkr.hpp"
 
+#define max_frames_in_flight 2
+
 namespace vkr {
 	struct impl_VideoContext {
 		VkInstance instance;
@@ -35,12 +37,12 @@ namespace vkr {
 
 		/* Command buffer */
 		VkCommandPool command_pool;
-		VkCommandBuffer command_buffer;
+		VkCommandBuffer command_buffers[max_frames_in_flight];
 
 		/* Syncronisation. */
-		VkSemaphore image_avail_semaphore;   /* Signalled when an image has been acquired from the swapchain. */
-		VkSemaphore render_finish_semaphore; /* Signalled when the picture has finished rendering. */
-		VkFence in_flight_fence;             /* Waits for the last frame to finish. */
+		VkSemaphore image_avail_semaphores[max_frames_in_flight];   /* Signalled when an image has been acquired from the swapchain. */
+		VkSemaphore render_finish_semaphores[max_frames_in_flight]; /* Signalled when the picture has finished rendering. */
+		VkFence in_flight_fences[max_frames_in_flight];             /* Waits for the last frame to finish. */
 	};
 
 	struct impl_Pipeline {

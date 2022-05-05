@@ -241,7 +241,7 @@ namespace vkr {
 		return m;
 	}
 
-	VideoContext::VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions) {
+	VideoContext::VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions) : current_frame(0) {
 		handle = new impl_VideoContext();
 
 		if (enable_validation_layers && !validation_layers_supported()) {
@@ -606,14 +606,14 @@ namespace vkr {
 			abort_with("Failed to create command pool.");
 		}
 
-		/* Create the command buffer. */
+		/* Create the command buffers. */
 		VkCommandBufferAllocateInfo cb_alloc_info{};
 		cb_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		cb_alloc_info.commandPool = handle->command_pool;
 		cb_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		cb_alloc_info.commandBufferCount = 1;
+		cb_alloc_info.commandBufferCount = max_frames_in_flight;
 
-		if (vkAllocateCommandBuffers(handle->device, &cb_alloc_info, &handle->command_buffer) != VK_SUCCESS) {
+		if (vkAllocateCommandBuffers(handle->device, &cb_alloc_info, handle->command_buffers) != VK_SUCCESS) {
 			abort_with("Failed to allocate command buffers.");
 		}
 
@@ -625,17 +625,21 @@ namespace vkr {
 		fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 		fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-		if (vkCreateSemaphore(handle->device, &semaphore_info, null, &handle->image_avail_semaphore)   != VK_SUCCESS ||
-			vkCreateSemaphore(handle->device, &semaphore_info, null, &handle->render_finish_semaphore) != VK_SUCCESS ||
-			vkCreateFence(handle->device, &fence_info, null, &handle->in_flight_fence)) {
-			abort_with("Failed to create syncronisation objects.");
+		for (u32 i = 0; i < max_frames_in_flight; i++) {
+			if (vkCreateSemaphore(handle->device, &semaphore_info, null, &handle->image_avail_semaphores[i])   != VK_SUCCESS ||
+				vkCreateSemaphore(handle->device, &semaphore_info, null, &handle->render_finish_semaphores[i]) != VK_SUCCESS ||
+				vkCreateFence(handle->device, &fence_info, null, &handle->in_flight_fences[i])) {
+				abort_with("Failed to create syncronisation objects.");
+			}
 		}
 	}
 
 	VideoContext::~VideoContext() {
-		vkDestroySemaphore(handle->device, handle->image_avail_semaphore, null);
-		vkDestroySemaphore(handle->device, handle->render_finish_semaphore, null);
-		vkDestroyFence(handle->device, handle->in_flight_fence, null);
+		for (u32 i = 0; i < max_frames_in_flight; i++) {
+			vkDestroySemaphore(handle->device, handle->image_avail_semaphores[i], null);
+			vkDestroySemaphore(handle->device, handle->render_finish_semaphores[i], null);
+			vkDestroyFence(handle->device, handle->in_flight_fences[i], null);
+		}
 
 		vkDestroyCommandPool(handle->device, handle->command_pool, null);
 
@@ -667,7 +671,7 @@ namespace vkr {
 		VkCommandBufferBeginInfo begin_info{};
 		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-		if (vkBeginCommandBuffer(handle->command_buffer, &begin_info) != VK_SUCCESS) {
+		if (vkBeginCommandBuffer(handle->command_buffers[current_frame], &begin_info) != VK_SUCCESS) {
 			warning("Failed to begin the command buffer.");
 			return;
 		}
@@ -683,31 +687,32 @@ namespace vkr {
 		render_pass_info.clearValueCount = 1;
 		render_pass_info.pClearValues = &clear_color;
 
-		vkCmdBeginRenderPass(handle->command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
-		vkCmdBindPipeline(handle->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, handle->pipeline);
-		vkCmdDraw(handle->command_buffer, 3, 1, 0, 0);
-		vkCmdEndRenderPass(handle->command_buffer);
+		vkCmdBeginRenderPass(handle->command_buffers[current_frame], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBindPipeline(handle->command_buffers[current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, handle->pipeline);
+		vkCmdDraw(handle->command_buffers[current_frame], 3, 1, 0, 0);
+		vkCmdEndRenderPass(handle->command_buffers[current_frame]);
 
-		if (vkEndCommandBuffer(handle->command_buffer) != VK_SUCCESS) {
+		if (vkEndCommandBuffer(handle->command_buffers[current_frame]) != VK_SUCCESS) {
 			warning("Failed to end the command buffer");
 			return;
 		}
 	}
 
 	void VideoContext::draw() {
-		vkWaitForFences(handle->device, 1, &handle->in_flight_fence, VK_TRUE, UINT64_MAX);
-		vkResetFences(handle->device, 1, &handle->in_flight_fence);
+		vkWaitForFences(handle->device, 1, &handle->in_flight_fences[current_frame], VK_TRUE, UINT64_MAX);
+		vkResetFences(handle->device, 1, &handle->in_flight_fences[current_frame]);
 
 		u32 image_id;
-		vkAcquireNextImageKHR(handle->device, handle->swapchain, UINT64_MAX, handle->image_avail_semaphore, VK_NULL_HANDLE, &image_id);
+		vkAcquireNextImageKHR(handle->device, handle->swapchain, UINT64_MAX,
+			handle->image_avail_semaphores[current_frame], VK_NULL_HANDLE, &image_id);
 
-		vkResetCommandBuffer(handle->command_buffer, 0);
+		vkResetCommandBuffer(handle->command_buffers[current_frame], 0);
 		record_commands(image_id);
 
-		VkSemaphore wait_semaphores[] = { handle->image_avail_semaphore };
+		VkSemaphore wait_semaphores[] = { handle->image_avail_semaphores[current_frame] };
 		VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
-		VkSemaphore signal_semaphores[] = { handle->render_finish_semaphore };
+		VkSemaphore signal_semaphores[] = { handle->render_finish_semaphores[current_frame] };
 
 		VkSubmitInfo submit_info{};
 		submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -715,11 +720,11 @@ namespace vkr {
 		submit_info.pWaitSemaphores = wait_semaphores;
 		submit_info.pWaitDstStageMask = wait_stages;
 		submit_info.commandBufferCount = 1;
-		submit_info.pCommandBuffers = &handle->command_buffer;
+		submit_info.pCommandBuffers = &handle->command_buffers[current_frame];
 		submit_info.signalSemaphoreCount = 1;
 		submit_info.pSignalSemaphores = signal_semaphores;
 
-		if (vkQueueSubmit(handle->graphics_queue, 1, &submit_info, handle->in_flight_fence) != VK_SUCCESS) {
+		if (vkQueueSubmit(handle->graphics_queue, 1, &submit_info, handle->in_flight_fences[current_frame]) != VK_SUCCESS) {
 			warning("Failed to submit draw command buffer.");
 			return;
 		}
@@ -736,6 +741,8 @@ namespace vkr {
 		present_info.pResults = null;
 
 		vkQueuePresentKHR(handle->present_queue, &present_info);
+
+		current_frame = (current_frame + 1) % max_frames_in_flight;
 	}
 
 	void VideoContext::wait_for_done() const {

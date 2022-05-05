@@ -74,6 +74,8 @@ namespace vkr {
 	private:
 		bool validation_layers_supported();
 		void record_commands(u32 image);
+
+		u32 current_frame;
 	public:
 		impl_VideoContext* handle;
 
