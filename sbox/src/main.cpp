@@ -2,6 +2,7 @@
 
 #include <vkr/vkr.hpp>
 
+#include <vulkan/vulkan.h>
 class SandboxApp : public vkr::App {
 private:
 	vkr::Pipeline* pipeline;

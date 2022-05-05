@@ -46,6 +46,9 @@ namespace vkr {
 
 		VkBuffer vb;
 		VkDeviceMemory vb_memory;
+
+		VkBuffer ib;
+		VkDeviceMemory ib_memory;
 	};
 
 	struct impl_Pipeline {

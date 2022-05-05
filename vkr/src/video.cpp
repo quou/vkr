@@ -252,6 +252,42 @@ namespace vkr {
 
 		return desc;
 	}
+	
+	/* Copies the VRAM from one buffer to another, similar to how memcpy works on the CPU.
+	 *
+	 * Waits for the copy to complete before returning. */
+	static void copy_buffer(impl_VideoContext* handle, VkBuffer dst, VkBuffer src, VkDeviceSize size) {
+		VkCommandBufferAllocateInfo alloc_info{};
+		alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		alloc_info.commandPool = handle->command_pool;
+		alloc_info.commandBufferCount = 1;
+
+		VkCommandBuffer command_buffer;
+		vkAllocateCommandBuffers(handle->device, &alloc_info, &command_buffer);
+
+		VkCommandBufferBeginInfo begin_info{};
+		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+		vkBeginCommandBuffer(command_buffer, &begin_info);
+		
+		VkBufferCopy copy{};
+		copy.size = size;
+		vkCmdCopyBuffer(command_buffer, src, dst, 1, &copy);
+
+		vkEndCommandBuffer(command_buffer);
+
+		VkSubmitInfo submit_info{};
+		submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submit_info.commandBufferCount = 1;
+		submit_info.pCommandBuffers = &command_buffer;
+
+		vkQueueSubmit(handle->graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+		vkQueueWaitIdle(handle->graphics_queue);
+
+		vkFreeCommandBuffers(handle->device, handle->command_pool, 1, &command_buffer);
+	}
 
 	static u32 get_vertex_attribute_descs(VkVertexInputAttributeDescription* attributes) {
 		attributes[0].binding = 0;
@@ -275,6 +311,36 @@ namespace vkr {
 		abort_with("Failed to find a suitable type of memory.");
 
 		return 0;
+	}
+
+	static void new_buffer(impl_VideoContext* handle, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags props,
+		VkBuffer* buffer, VkDeviceMemory* buffer_memory) {
+
+		VkBufferCreateInfo buffer_info{};
+		buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		buffer_info.size = size;
+		buffer_info.usage = usage;
+		buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		if (vkCreateBuffer(handle->device, &buffer_info, null, buffer) != VK_SUCCESS) {
+			abort_with("Failed to create vertex buffer.");
+		}
+
+		VkMemoryRequirements mem_req;
+		vkGetBufferMemoryRequirements(handle->device, *buffer, &mem_req);
+
+		VkMemoryAllocateInfo alloc_info{};
+		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc_info.allocationSize = mem_req.size;
+		alloc_info.memoryTypeIndex = find_memory_type(handle, mem_req.memoryTypeBits,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+		if (vkAllocateMemory(handle->device, &alloc_info, null, buffer_memory) != VK_SUCCESS) {
+			abort_with("Failed to allocate memory for a vertex buffer.");
+		}
+
+		vkBindBufferMemory(handle->device, *buffer, *buffer_memory, 0);
 	}
 
 	VideoContext::VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions) : current_frame(0) {
@@ -647,42 +713,52 @@ namespace vkr {
 		}
 
 		Vertex verts[] = {
-			{ { 0.0f, -0.5f} },
-			{ { 0.5f,  0.5f} },
-			{ {-0.5f,  0.5f} }
+			{{-0.5f, -0.5f}},
+			{{ 0.5f, -0.5f}},
+			{{ 0.5f,  0.5f}},
+			{{-0.5f,  0.5f}}
 		};
 
-		/* Create the vertex buffer. */
-		VkBufferCreateInfo buffer_info{};
-		buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buffer_info.size = sizeof(verts);
-		buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-		buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		u16 indices[] = {
+			0, 1, 2, 2, 3, 0
+		};
 
-		if (vkCreateBuffer(handle->device, &buffer_info, null, &handle->vb) != VK_SUCCESS) {
-			abort_with("Failed to create vertex buffer.");
-		}
+		/* Create the stage buffer, for pushing the data to the vertex buffer. */
+		VkBuffer stage_buffer;
+		VkDeviceMemory stage_buffer_memory;
 
-		VkMemoryRequirements mem_req;
-		vkGetBufferMemoryRequirements(handle->device, handle->vb, &mem_req);
-
-		VkMemoryAllocateInfo alloc_info{};
-		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc_info.allocationSize = mem_req.size;
-		alloc_info.memoryTypeIndex = find_memory_type(handle, mem_req.memoryTypeBits,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-		if (vkAllocateMemory(handle->device, &alloc_info, null, &handle->vb_memory) != VK_SUCCESS) {
-			abort_with("Failed to allocate memory for a vertex buffer.");
-		}
-
-		vkBindBufferMemory(handle->device, handle->vb, handle->vb_memory, 0);
+		new_buffer(handle, sizeof(verts), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&stage_buffer, &stage_buffer_memory);
 
 		void* data;
-		vkMapMemory(handle->device, handle->vb_memory, 0, buffer_info.size, 0, &data);
-		memcpy(data, verts, (usize)buffer_info.size);
-		vkUnmapMemory(handle->device, handle->vb_memory);
+		vkMapMemory(handle->device, stage_buffer_memory, 0, sizeof(verts), 0, &data);
+		memcpy(data, verts, sizeof(verts));
+		vkUnmapMemory(handle->device, stage_buffer_memory);
+
+		/* Create the vertex buffer, using the stage buffer. */
+		new_buffer(handle, sizeof(verts), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &handle->vb, &handle->vb_memory);
+		copy_buffer(handle, handle->vb, stage_buffer, sizeof(verts));
+
+		vkDestroyBuffer(handle->device, stage_buffer, null);
+		vkFreeMemory(handle->device, stage_buffer_memory, null);
+
+		/* Create the index buffer */
+		new_buffer(handle, sizeof(indices), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&stage_buffer, &stage_buffer_memory);
+
+		vkMapMemory(handle->device, stage_buffer_memory, 0, sizeof(indices), 0, &data);
+		memcpy(data, indices, sizeof(indices));
+		vkUnmapMemory(handle->device, stage_buffer_memory);
+
+		new_buffer(handle, sizeof(indices), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &handle->ib, &handle->ib_memory);
+		copy_buffer(handle, handle->ib, stage_buffer, sizeof(indices));
+
+		vkDestroyBuffer(handle->device, stage_buffer, null);
+		vkFreeMemory(handle->device, stage_buffer_memory, null);
 
 		/* Create the command buffers. */
 		VkCommandBufferAllocateInfo cb_alloc_info{};
@@ -738,6 +814,9 @@ namespace vkr {
 		vkDestroyBuffer(handle->device, handle->vb, null);
 		vkFreeMemory(handle->device, handle->vb_memory, null);
 
+		vkDestroyBuffer(handle->device, handle->ib, null);
+		vkFreeMemory(handle->device, handle->ib_memory, null);
+
 		vkDestroyDevice(handle->device, null);
 		vkDestroySurfaceKHR(handle->instance, handle->surface, null);
 		vkDestroyInstance(handle->instance, null);
@@ -775,8 +854,9 @@ namespace vkr {
 		VkBuffer vbs[] = { handle->vb };
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(handle->command_buffers[current_frame], 0, 1, vbs, offsets);
+		vkCmdBindIndexBuffer(handle->command_buffers[current_frame], handle->ib, 0, VK_INDEX_TYPE_UINT16);
 
-		vkCmdDraw(handle->command_buffers[current_frame], 3, 1, 0, 0);
+		vkCmdDrawIndexed(handle->command_buffers[current_frame], 6, 1, 0, 0, 0);
 
 		vkCmdEndRenderPass(handle->command_buffers[current_frame]);
 
