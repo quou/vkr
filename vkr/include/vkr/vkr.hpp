@@ -70,6 +70,10 @@ namespace vkr {
 		~Pipeline();
 	};
 
+	struct Vertex {
+		v2f position;
+	};
+
 	class VKR_API VideoContext {
 	private:
 		bool validation_layers_supported();

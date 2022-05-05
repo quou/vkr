@@ -10,6 +10,8 @@
 #include "vkr.hpp"
 #include "internal.hpp"
 
+#define vertex_attribute_desc_max 1
+
 namespace vkr {
 	static const char* validation_layers[] = {
 		"VK_LAYER_KHRONOS_validation"
@@ -239,6 +241,40 @@ namespace vkr {
 		}
 
 		return m;
+	}
+
+	static VkVertexInputBindingDescription get_vertex_binding_desc() {
+		VkVertexInputBindingDescription desc{};
+
+		desc.binding = 0;
+		desc.stride = sizeof(Vertex);
+		desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+		return desc;
+	}
+
+	static u32 get_vertex_attribute_descs(VkVertexInputAttributeDescription* attributes) {
+		attributes[0].binding = 0;
+		attributes[0].location = 0;
+		attributes[0].format = VK_FORMAT_R32G32_SFLOAT;
+		attributes[0].offset = offsetof(Vertex, position);
+
+		return vertex_attribute_desc_max;
+	}
+
+	static u32 find_memory_type(impl_VideoContext* handle, u32 filter, VkMemoryPropertyFlags flags) {
+		VkPhysicalDeviceMemoryProperties mem_props;
+		vkGetPhysicalDeviceMemoryProperties(handle->pdevice, &mem_props);
+
+		for (u32 i = 0; i < mem_props.memoryTypeCount; i++) {
+			if ((filter & (1 << i)) && (mem_props.memoryTypes[i].propertyFlags & flags) == flags) {
+				return i;
+			}
+		}
+
+		abort_with("Failed to find a suitable type of memory.");
+
+		return 0;
 	}
 
 	VideoContext::VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions) : current_frame(0) {
@@ -484,12 +520,16 @@ namespace vkr {
 
 		VkPipelineShaderStageCreateInfo stages[] = { v_stage_info, f_stage_info };
 
+		VkVertexInputAttributeDescription attribs[vertex_attribute_desc_max];
+		get_vertex_attribute_descs(attribs);
+		auto bind_desc = get_vertex_binding_desc();
+
 		VkPipelineVertexInputStateCreateInfo vertex_input_info{};
 		vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		vertex_input_info.vertexBindingDescriptionCount = 0;
-		vertex_input_info.pVertexBindingDescriptions = null;
-		vertex_input_info.vertexAttributeDescriptionCount = 0;
-		vertex_input_info.pVertexAttributeDescriptions = null;
+		vertex_input_info.vertexBindingDescriptionCount = 1;
+		vertex_input_info.pVertexBindingDescriptions = &bind_desc;
+		vertex_input_info.vertexAttributeDescriptionCount = vertex_attribute_desc_max;
+		vertex_input_info.pVertexAttributeDescriptions = attribs;
 
 		VkPipelineInputAssemblyStateCreateInfo input_assembly{};
 		input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -606,6 +646,44 @@ namespace vkr {
 			abort_with("Failed to create command pool.");
 		}
 
+		Vertex verts[] = {
+			{ { 0.0f, -0.5f} },
+			{ { 0.5f,  0.5f} },
+			{ {-0.5f,  0.5f} }
+		};
+
+		/* Create the vertex buffer. */
+		VkBufferCreateInfo buffer_info{};
+		buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		buffer_info.size = sizeof(verts);
+		buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		if (vkCreateBuffer(handle->device, &buffer_info, null, &handle->vb) != VK_SUCCESS) {
+			abort_with("Failed to create vertex buffer.");
+		}
+
+		VkMemoryRequirements mem_req;
+		vkGetBufferMemoryRequirements(handle->device, handle->vb, &mem_req);
+
+		VkMemoryAllocateInfo alloc_info{};
+		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc_info.allocationSize = mem_req.size;
+		alloc_info.memoryTypeIndex = find_memory_type(handle, mem_req.memoryTypeBits,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+		if (vkAllocateMemory(handle->device, &alloc_info, null, &handle->vb_memory) != VK_SUCCESS) {
+			abort_with("Failed to allocate memory for a vertex buffer.");
+		}
+
+		vkBindBufferMemory(handle->device, handle->vb, handle->vb_memory, 0);
+
+		void* data;
+		vkMapMemory(handle->device, handle->vb_memory, 0, buffer_info.size, 0, &data);
+		memcpy(data, verts, (usize)buffer_info.size);
+		vkUnmapMemory(handle->device, handle->vb_memory);
+
 		/* Create the command buffers. */
 		VkCommandBufferAllocateInfo cb_alloc_info{};
 		cb_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -617,7 +695,7 @@ namespace vkr {
 			abort_with("Failed to allocate command buffers.");
 		}
 
-		/* Create the syncronisation objects. */
+		/* Create the synchronisation objects. */
 		VkSemaphoreCreateInfo semaphore_info{};
 		semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
@@ -629,7 +707,7 @@ namespace vkr {
 			if (vkCreateSemaphore(handle->device, &semaphore_info, null, &handle->image_avail_semaphores[i])   != VK_SUCCESS ||
 				vkCreateSemaphore(handle->device, &semaphore_info, null, &handle->render_finish_semaphores[i]) != VK_SUCCESS ||
 				vkCreateFence(handle->device, &fence_info, null, &handle->in_flight_fences[i])) {
-				abort_with("Failed to create syncronisation objects.");
+				abort_with("Failed to create synchronisation objects.");
 			}
 		}
 	}
@@ -656,6 +734,10 @@ namespace vkr {
 		}
 
 		vkDestroySwapchainKHR(handle->device, handle->swapchain, null);
+
+		vkDestroyBuffer(handle->device, handle->vb, null);
+		vkFreeMemory(handle->device, handle->vb_memory, null);
+
 		vkDestroyDevice(handle->device, null);
 		vkDestroySurfaceKHR(handle->instance, handle->surface, null);
 		vkDestroyInstance(handle->instance, null);
@@ -689,7 +771,13 @@ namespace vkr {
 
 		vkCmdBeginRenderPass(handle->command_buffers[current_frame], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(handle->command_buffers[current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, handle->pipeline);
+
+		VkBuffer vbs[] = { handle->vb };
+		VkDeviceSize offsets[] = { 0 };
+		vkCmdBindVertexBuffers(handle->command_buffers[current_frame], 0, 1, vbs, offsets);
+
 		vkCmdDraw(handle->command_buffers[current_frame], 3, 1, 0, 0);
+
 		vkCmdEndRenderPass(handle->command_buffers[current_frame]);
 
 		if (vkEndCommandBuffer(handle->command_buffers[current_frame]) != VK_SUCCESS) {
