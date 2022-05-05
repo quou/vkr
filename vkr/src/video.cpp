@@ -472,6 +472,8 @@ namespace vkr {
 
 		swap_create_info.preTransform = scc.capabilities.currentTransform;
 
+		scc.free();
+
 		swap_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 
 		swap_create_info.presentMode = present_mode;
@@ -712,54 +714,6 @@ namespace vkr {
 			abort_with("Failed to create command pool.");
 		}
 
-		Vertex verts[] = {
-			{{-0.5f, -0.5f}},
-			{{ 0.5f, -0.5f}},
-			{{ 0.5f,  0.5f}},
-			{{-0.5f,  0.5f}}
-		};
-
-		u16 indices[] = {
-			0, 1, 2, 2, 3, 0
-		};
-
-		/* Create the stage buffer, for pushing the data to the vertex buffer. */
-		VkBuffer stage_buffer;
-		VkDeviceMemory stage_buffer_memory;
-
-		new_buffer(handle, sizeof(verts), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			&stage_buffer, &stage_buffer_memory);
-
-		void* data;
-		vkMapMemory(handle->device, stage_buffer_memory, 0, sizeof(verts), 0, &data);
-		memcpy(data, verts, sizeof(verts));
-		vkUnmapMemory(handle->device, stage_buffer_memory);
-
-		/* Create the vertex buffer, using the stage buffer. */
-		new_buffer(handle, sizeof(verts), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &handle->vb, &handle->vb_memory);
-		copy_buffer(handle, handle->vb, stage_buffer, sizeof(verts));
-
-		vkDestroyBuffer(handle->device, stage_buffer, null);
-		vkFreeMemory(handle->device, stage_buffer_memory, null);
-
-		/* Create the index buffer */
-		new_buffer(handle, sizeof(indices), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			&stage_buffer, &stage_buffer_memory);
-
-		vkMapMemory(handle->device, stage_buffer_memory, 0, sizeof(indices), 0, &data);
-		memcpy(data, indices, sizeof(indices));
-		vkUnmapMemory(handle->device, stage_buffer_memory);
-
-		new_buffer(handle, sizeof(indices), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &handle->ib, &handle->ib_memory);
-		copy_buffer(handle, handle->ib, stage_buffer, sizeof(indices));
-
-		vkDestroyBuffer(handle->device, stage_buffer, null);
-		vkFreeMemory(handle->device, stage_buffer_memory, null);
-
 		/* Create the command buffers. */
 		VkCommandBufferAllocateInfo cb_alloc_info{};
 		cb_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -811,12 +765,6 @@ namespace vkr {
 
 		vkDestroySwapchainKHR(handle->device, handle->swapchain, null);
 
-		vkDestroyBuffer(handle->device, handle->vb, null);
-		vkFreeMemory(handle->device, handle->vb_memory, null);
-
-		vkDestroyBuffer(handle->device, handle->ib, null);
-		vkFreeMemory(handle->device, handle->ib_memory, null);
-
 		vkDestroyDevice(handle->device, null);
 		vkDestroySurfaceKHR(handle->instance, handle->surface, null);
 		vkDestroyInstance(handle->instance, null);
@@ -829,6 +777,18 @@ namespace vkr {
 	}
 
 	void VideoContext::record_commands(u32 image) {
+
+	}
+
+	void VideoContext::begin() {
+		vkWaitForFences(handle->device, 1, &handle->in_flight_fences[current_frame], VK_TRUE, UINT64_MAX);
+		vkResetFences(handle->device, 1, &handle->in_flight_fences[current_frame]);
+
+		vkAcquireNextImageKHR(handle->device, handle->swapchain, UINT64_MAX,
+			handle->image_avail_semaphores[current_frame], VK_NULL_HANDLE, &image_id);
+
+		vkResetCommandBuffer(handle->command_buffers[current_frame], 0);
+
 		VkCommandBufferBeginInfo begin_info{};
 		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
@@ -840,7 +800,7 @@ namespace vkr {
 		VkRenderPassBeginInfo render_pass_info{};
 		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		render_pass_info.renderPass = handle->render_pass;
-		render_pass_info.framebuffer = handle->swapchain_framebuffers[image];
+		render_pass_info.framebuffer = handle->swapchain_framebuffers[image_id];
 		render_pass_info.renderArea.offset = { 0, 0 };
 		render_pass_info.renderArea.extent = handle->swapchain_extent;
 
@@ -850,32 +810,15 @@ namespace vkr {
 
 		vkCmdBeginRenderPass(handle->command_buffers[current_frame], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(handle->command_buffers[current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, handle->pipeline);
+	}
 
-		VkBuffer vbs[] = { handle->vb };
-		VkDeviceSize offsets[] = { 0 };
-		vkCmdBindVertexBuffers(handle->command_buffers[current_frame], 0, 1, vbs, offsets);
-		vkCmdBindIndexBuffer(handle->command_buffers[current_frame], handle->ib, 0, VK_INDEX_TYPE_UINT16);
-
-		vkCmdDrawIndexed(handle->command_buffers[current_frame], 6, 1, 0, 0, 0);
-
+	void VideoContext::end() {
 		vkCmdEndRenderPass(handle->command_buffers[current_frame]);
 
 		if (vkEndCommandBuffer(handle->command_buffers[current_frame]) != VK_SUCCESS) {
 			warning("Failed to end the command buffer");
 			return;
 		}
-	}
-
-	void VideoContext::draw() {
-		vkWaitForFences(handle->device, 1, &handle->in_flight_fences[current_frame], VK_TRUE, UINT64_MAX);
-		vkResetFences(handle->device, 1, &handle->in_flight_fences[current_frame]);
-
-		u32 image_id;
-		vkAcquireNextImageKHR(handle->device, handle->swapchain, UINT64_MAX,
-			handle->image_avail_semaphores[current_frame], VK_NULL_HANDLE, &image_id);
-
-		vkResetCommandBuffer(handle->command_buffers[current_frame], 0);
-		record_commands(image_id);
 
 		VkSemaphore wait_semaphores[] = { handle->image_avail_semaphores[current_frame] };
 		VkPipelineStageFlags wait_stages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
@@ -915,5 +858,84 @@ namespace vkr {
 
 	void VideoContext::wait_for_done() const {
 		vkDeviceWaitIdle(handle->device);
+	}
+
+	Buffer::Buffer(VideoContext* video) : video(video) {
+		handle = new impl_Buffer();
+	}
+
+	Buffer::~Buffer() {
+		delete handle;
+	}
+
+	VertexBuffer::VertexBuffer(VideoContext* video, Vertex* verts, usize count) : Buffer(video) {
+		VkBuffer stage_buffer;
+		VkDeviceMemory stage_buffer_memory;
+
+		const usize size = sizeof(count) * sizeof(Vertex);
+
+		new_buffer(video->handle, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&stage_buffer, &stage_buffer_memory);
+
+		void* data;
+		vkMapMemory(video->handle->device, stage_buffer_memory, 0, size, 0, &data);
+		memcpy(data, verts, size);
+		vkUnmapMemory(video->handle->device, stage_buffer_memory);
+
+		new_buffer(video->handle, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &handle->buffer, &handle->memory);
+		copy_buffer(video->handle, handle->buffer, stage_buffer, size);
+
+		vkDestroyBuffer(video->handle->device, stage_buffer, null);
+		vkFreeMemory(video->handle->device, stage_buffer_memory, null);
+	}
+
+	VertexBuffer::~VertexBuffer() {
+		video->wait_for_done();
+
+		vkDestroyBuffer(video->handle->device, handle->buffer, null);
+		vkFreeMemory(video->handle->device, handle->memory, null);
+	}
+
+	void VertexBuffer::bind() {
+		VkBuffer vbs[] = { handle->buffer };
+		VkDeviceSize offsets[] = { 0 };
+		vkCmdBindVertexBuffers(video->handle->command_buffers[video->current_frame], 0, 1, vbs, offsets);
+	}
+
+	IndexBuffer::IndexBuffer(VideoContext* video, u16* indices, usize count) : Buffer(video), count(count) {
+		usize size = sizeof(u16) * count;
+
+		VkBuffer stage_buffer;
+		VkDeviceMemory stage_buffer_memory;
+
+		new_buffer(video->handle, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&stage_buffer, &stage_buffer_memory);
+
+		void* data;
+		vkMapMemory(video->handle->device, stage_buffer_memory, 0, size, 0, &data);
+		memcpy(data, indices, size);
+		vkUnmapMemory(video->handle->device, stage_buffer_memory);
+
+		new_buffer(video->handle, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &handle->buffer, &handle->memory);
+		copy_buffer(video->handle, handle->buffer, stage_buffer, size);
+
+		vkDestroyBuffer(video->handle->device, stage_buffer, null);
+		vkFreeMemory(video->handle->device, stage_buffer_memory, null);
+	}
+
+	IndexBuffer::~IndexBuffer() {
+		video->wait_for_done();
+
+		vkDestroyBuffer(video->handle->device, handle->buffer, null);
+		vkFreeMemory(video->handle->device, handle->memory, null);
+	}
+
+	void IndexBuffer::draw() {
+		vkCmdBindIndexBuffer(video->handle->command_buffers[video->current_frame], handle->buffer, 0, VK_INDEX_TYPE_UINT16);
+		vkCmdDrawIndexed(video->handle->command_buffers[video->current_frame], count, 1, 0, 0, 0);
 	}
 };

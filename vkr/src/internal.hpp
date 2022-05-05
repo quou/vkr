@@ -43,15 +43,14 @@ namespace vkr {
 		VkSemaphore image_avail_semaphores[max_frames_in_flight];   /* Signalled when an image has been acquired from the swapchain. */
 		VkSemaphore render_finish_semaphores[max_frames_in_flight]; /* Signalled when the picture has finished rendering. */
 		VkFence in_flight_fences[max_frames_in_flight];             /* Waits for the last frame to finish. */
-
-		VkBuffer vb;
-		VkDeviceMemory vb_memory;
-
-		VkBuffer ib;
-		VkDeviceMemory ib_memory;
 	};
 
 	struct impl_Pipeline {
 
+	};
+
+	struct impl_Buffer {
+		VkBuffer buffer;
+		VkDeviceMemory memory;
 	};
 };

@@ -41,7 +41,9 @@ namespace vkr {
 		while (!glfwWindowShouldClose(handle->window)) {
 			glfwPollEvents();
 
+			video->begin();
 			on_update(1.0);
+			video->end();
 		}
 
 		on_deinit();

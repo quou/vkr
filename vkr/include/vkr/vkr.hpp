@@ -26,13 +26,17 @@ namespace vkr {
 	 * state of a class wrapper that might rely on external headers,
 	 * namely glfw3.h and vulkan.h. */
 	struct impl_App;
-	struct impl_VideoContext;
+	struct impl_Buffer;
 	struct impl_Pipeline;
+	struct impl_VideoContext;
 
 	/* Class forward declarations. */
 	class App;
-	class VideoContext;
+	class Buffer;
+	class IndexBuffer;
 	class Shader;
+	class VertexBuffer;
+	class VideoContext;
 
 	/* To be inherited by client applications to provide custom
 	 * functionality and data. */
@@ -74,21 +78,54 @@ namespace vkr {
 		v2f position;
 	};
 
+	class VKR_API Buffer {
+	protected:
+		VideoContext* video;
+		impl_Buffer* handle;
+
+		Buffer(VideoContext* video);
+		virtual ~Buffer();
+	};
+
+	class VKR_API VertexBuffer : public Buffer {
+	public:
+		VertexBuffer(VideoContext* video, Vertex* verts, usize count);
+		~VertexBuffer();
+
+		void bind();
+	};
+
+	class VKR_API IndexBuffer : public Buffer {
+	private:
+		usize count;
+	public:
+		IndexBuffer(VideoContext* video, u16* indices, usize count);
+		~IndexBuffer();
+
+		void draw();
+	};
+
 	class VKR_API VideoContext {
 	private:
 		bool validation_layers_supported();
 		void record_commands(u32 image);
 
 		u32 current_frame;
+		u32 image_id;
+
+		friend class Buffer;
+		friend class VertexBuffer;
+		friend class IndexBuffer;
 	public:
 		impl_VideoContext* handle;
 
 		VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions);
 		~VideoContext();
 
-		void draw();
-
 		/* Waits for all the current operations to finish. */
 		void wait_for_done() const;
+
+		void begin();
+		void end();
 	};
 };
