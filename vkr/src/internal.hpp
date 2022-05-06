@@ -42,6 +42,9 @@ namespace vkr {
 
 	struct impl_Buffer {
 		VkBuffer buffer;
+
+		/* TODO: Make a proper allocator so that there
+		 * isn't a different allocation for each buffer. */
 		VkDeviceMemory memory;
 	};
 

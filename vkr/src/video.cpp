@@ -347,7 +347,7 @@ namespace vkr {
 		buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 		if (vkCreateBuffer(handle->device, &buffer_info, null, buffer) != VK_SUCCESS) {
-			abort_with("Failed to create vertex buffer.");
+			abort_with("Failed to create buffer.");
 		}
 
 		VkMemoryRequirements mem_req;
@@ -356,12 +356,10 @@ namespace vkr {
 		VkMemoryAllocateInfo alloc_info{};
 		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		alloc_info.allocationSize = mem_req.size;
-		alloc_info.memoryTypeIndex = find_memory_type(handle, mem_req.memoryTypeBits,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		alloc_info.memoryTypeIndex = find_memory_type(handle, mem_req.memoryTypeBits, props);
 
 		if (vkAllocateMemory(handle->device, &alloc_info, null, buffer_memory) != VK_SUCCESS) {
-			abort_with("Failed to allocate memory for a vertex buffer.");
+			abort_with("Failed to allocate memory for a buffer.");
 		}
 
 		vkBindBufferMemory(handle->device, *buffer, *buffer_memory, 0);
