@@ -840,9 +840,17 @@ namespace vkr {
 		vkDestroyShaderModule(video->handle->device, v_shader, null);
 		vkDestroyShaderModule(video->handle->device, f_shader, null);
 
-		/* Create framebuffers for the swapchain.
-		 *
-		 * TODO: Move this to `make_default`. */
+		delete[] vk_attribs;
+	}
+
+	RenderPass::~RenderPass() {
+		vkDestroyPipeline(video->handle->device, handle->pipeline, null);
+		vkDestroyPipelineLayout(video->handle->device, handle->pipeline_layout, null);
+		vkDestroyRenderPass(video->handle->device, handle->render_pass, null);
+	}
+
+	void RenderPass::make_default() {
+		/* Create framebuffers for the swapchain. */
 		video->handle->swapchain_framebuffers = new VkFramebuffer[video->handle->swapchain_image_count];
 		for (u32 i = 0; i < video->handle->swapchain_image_count; i++) {
 			VkImageView attachments[] = {
@@ -863,17 +871,6 @@ namespace vkr {
 			}
 		}
 
-		delete[] vk_attribs;
-	}
-
-	RenderPass::~RenderPass() {
-		vkDestroyPipeline(video->handle->device, handle->pipeline, null);
-		vkDestroyPipelineLayout(video->handle->device, handle->pipeline_layout, null);
-		vkDestroyRenderPass(video->handle->device, handle->render_pass, null);
-	}
-
-	void RenderPass::make_default() {
-		
 	}
 
 	void RenderPass::begin() {

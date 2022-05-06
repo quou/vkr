@@ -22,7 +22,10 @@ public:
 			}
 		};
 
-		pass = new RenderPass(video, "res/shaders/simple.vert.spv", "res/shaders/simple.frag.spv", sizeof(Vertex), attribs, 1);
+		pass = new RenderPass(video,
+			"res/shaders/simple.vert.spv",
+			"res/shaders/simple.frag.spv",
+			sizeof(Vertex), attribs, 1);
 		pass->make_default();
 
 		Vertex verts[] = {
