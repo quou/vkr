@@ -30,11 +30,6 @@ namespace vkr {
 		/* Framebuffers */
 		VkFramebuffer* swapchain_framebuffers;
 
-		/* Pipeline */
-		VkRenderPass render_pass;
-		VkPipelineLayout pipeline_layout;
-		VkPipeline pipeline;
-
 		/* Command buffer */
 		VkCommandPool command_pool;
 		VkCommandBuffer command_buffers[max_frames_in_flight];
@@ -45,12 +40,14 @@ namespace vkr {
 		VkFence in_flight_fences[max_frames_in_flight];             /* Waits for the last frame to finish. */
 	};
 
-	struct impl_Pipeline {
-
-	};
-
 	struct impl_Buffer {
 		VkBuffer buffer;
 		VkDeviceMemory memory;
+	};
+
+	struct impl_RenderPass {
+		VkRenderPass render_pass;
+		VkPipelineLayout pipeline_layout;
+		VkPipeline pipeline;
 	};
 };

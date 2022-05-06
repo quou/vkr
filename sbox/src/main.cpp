@@ -2,49 +2,60 @@
 
 #include <vkr/vkr.hpp>
 
-#include <vulkan/vulkan.h>
+using namespace vkr;
+
 class SandboxApp : public vkr::App {
 private:
-	vkr::Pipeline* pipeline;
+	VertexBuffer* vb;
+	IndexBuffer* ib;
 
-	vkr::VertexBuffer* vb;
-	vkr::IndexBuffer* ib;
+	RenderPass* pass;
 public:
-	SandboxApp() : App("Sandbox", vkr::v2i(800, 600)) {
-	}
+	SandboxApp() : App("Sandbox", vkr::v2i(800, 600)) {}
 
 	void on_init() override {
-		pipeline = new vkr::Pipeline(video);
+		RenderPass::Attribute attribs[] = {
+			{
+				0,
+				offsetof(Vertex, position),
+				RenderPass::Attribute::Type::float2
+			}
+		};
 
-		vkr::Vertex verts[] = {
+		pass = new RenderPass(video, "res/shaders/simple.vert.spv", "res/shaders/simple.frag.spv", sizeof(Vertex), attribs, 1);
+		pass->make_default();
+
+		Vertex verts[] = {
 			{{-0.5f, -0.5f}},
 			{{ 0.5f, -0.5f}},
 			{{ 0.5f,  0.5f}},
 			{{-0.5f,  0.5f}}
 		};
 
-		vkr::u16 indices[] = {
+		u16 indices[] = {
 			0, 1, 2, 2, 3, 0
 		};
 
-		vb = new vkr::VertexBuffer(video, verts, sizeof(verts) / sizeof(*verts));
-		ib = new vkr::IndexBuffer(video, indices, sizeof(indices) / sizeof(*indices));
+		vb = new VertexBuffer(video, verts, sizeof(verts) / sizeof(*verts));
+		ib = new IndexBuffer(video, indices, sizeof(indices) / sizeof(*indices));
 	}
 
-	void on_update(vkr::f64 ts) override {
-		vb->bind();
-		ib->draw();
+	void on_update(f64 ts) override {
+		pass->begin();
+			vb->bind();
+			ib->draw();
+		pass->end();
 	}
 
 	void on_deinit() override {
 		delete vb;
 		delete ib;
 
-		delete pipeline;
+		delete pass;
 	}
 };
 
-vkr::i32 main() {
+i32 main() {
 	SandboxApp* app = new SandboxApp();
 	app->run();
 	delete app;

@@ -243,14 +243,47 @@ namespace vkr {
 		return m;
 	}
 
-	static VkVertexInputBindingDescription get_vertex_binding_desc() {
-		VkVertexInputBindingDescription desc{};
+	/* Converts an array of RenderPass::Attributes into an array of
+	 * VkVertexInputInputAttributeDescriptions and a VkVertexInputBindingDescription */
+	static void render_pass_attributes_to_vk_attributes(
+		RenderPass::Attribute* attribs,
+		usize attrib_count,
+		usize stride,
+		VkVertexInputBindingDescription* vk_desc,
+		VkVertexInputAttributeDescription* vk_attribs) {
 
-		desc.binding = 0;
-		desc.stride = sizeof(Vertex);
-		desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		memset(vk_desc, 0, sizeof(VkVertexInputBindingDescription));
 
-		return desc;
+		vk_desc->binding = 0;
+		vk_desc->stride = stride;
+		vk_desc->inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+		for (usize i = 0; i < attrib_count; i++) {
+			RenderPass::Attribute* attrib = attribs + i;
+			VkVertexInputAttributeDescription* vk_attrib = vk_attribs + i;
+
+			memset(vk_attrib, 0, sizeof(VkVertexInputAttributeDescription));
+
+			vk_attrib->binding = 0;
+			vk_attrib->location = attrib->location;
+			vk_attrib->offset = attrib->offset;
+
+			switch (attrib->type) {
+			case RenderPass::Attribute::Type::float1:
+				vk_attrib->format = VK_FORMAT_R32_SFLOAT;
+				break;
+			case RenderPass::Attribute::Type::float2:
+				vk_attrib->format = VK_FORMAT_R32G32_SFLOAT;
+				break;
+			case RenderPass::Attribute::Type::float3:
+				vk_attrib->format = VK_FORMAT_R32G32B32_SFLOAT;
+				break;
+			case RenderPass::Attribute::Type::float4:
+				vk_attrib->format = VK_FORMAT_R32G32B32A32_SFLOAT;
+				break;
+			default: break;
+			}
+		}
 	}
 	
 	/* Copies the VRAM from one buffer to another, similar to how memcpy works on the CPU.
@@ -287,15 +320,6 @@ namespace vkr {
 		vkQueueWaitIdle(handle->graphics_queue);
 
 		vkFreeCommandBuffers(handle->device, handle->command_pool, 1, &command_buffer);
-	}
-
-	static u32 get_vertex_attribute_descs(VkVertexInputAttributeDescription* attributes) {
-		attributes[0].binding = 0;
-		attributes[0].location = 0;
-		attributes[0].format = VK_FORMAT_R32G32_SFLOAT;
-		attributes[0].offset = offsetof(Vertex, position);
-
-		return vertex_attribute_desc_max;
 	}
 
 	static u32 find_memory_type(impl_VideoContext* handle, u32 filter, VkMemoryPropertyFlags flags) {
@@ -516,194 +540,6 @@ namespace vkr {
 			}
 		}
 
-		/* Create a render pass.
-		 *
-		 * TODO: Abstract this separately. */
-		VkAttachmentDescription color_attachment{};
-		color_attachment.format = handle->swapchain_format;
-		color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-		color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-		color_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		color_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		color_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		color_attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-		VkAttachmentReference color_attachment_ref{};
-		color_attachment_ref.attachment = 0;
-		color_attachment_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-		VkSubpassDescription subpass{};
-		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		subpass.colorAttachmentCount = 1;
-		subpass.pColorAttachments = &color_attachment_ref;
-
-		VkSubpassDependency dep{};
-		dep.srcSubpass = VK_SUBPASS_EXTERNAL;
-		dep.dstSubpass = 0;
-		dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dep.srcAccessMask = 0;
-		dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-		VkRenderPassCreateInfo render_pass_info{};
-		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		render_pass_info.attachmentCount = 1;
-		render_pass_info.pAttachments = &color_attachment;
-		render_pass_info.subpassCount = 1;
-		render_pass_info.pSubpasses = &subpass;
-		render_pass_info.dependencyCount = 1;
-		render_pass_info.pDependencies = &dep;
-
-		if (vkCreateRenderPass(handle->device, &render_pass_info, null, &handle->render_pass)) {
-			abort_with("Failed to create render pass.");
-		}
-
-		/* Create shaders and pipeline.
-		 *
-		 * TODO: Abstract this separately. */
-		u8* v_buf; usize v_size;
-		u8* f_buf; usize f_size;
-
-		read_raw("res/shaders/simple.vert.spv", &v_buf, &v_size);
-		read_raw("res/shaders/simple.frag.spv", &f_buf, &f_size);
-
-		VkShaderModule v_shader = new_shader_module(handle->device, v_buf, v_size);
-		VkShaderModule f_shader = new_shader_module(handle->device, f_buf, f_size);
-
-		delete[] v_buf;
-		delete[] f_buf;
-
-		VkPipelineShaderStageCreateInfo v_stage_info{};
-		v_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		v_stage_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-		v_stage_info.module = v_shader;
-		v_stage_info.pName = "main";
-
-		VkPipelineShaderStageCreateInfo f_stage_info{};
-		f_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		f_stage_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-		f_stage_info.module = f_shader;
-		f_stage_info.pName = "main";
-
-		VkPipelineShaderStageCreateInfo stages[] = { v_stage_info, f_stage_info };
-
-		VkVertexInputAttributeDescription attribs[vertex_attribute_desc_max];
-		get_vertex_attribute_descs(attribs);
-		auto bind_desc = get_vertex_binding_desc();
-
-		VkPipelineVertexInputStateCreateInfo vertex_input_info{};
-		vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		vertex_input_info.vertexBindingDescriptionCount = 1;
-		vertex_input_info.pVertexBindingDescriptions = &bind_desc;
-		vertex_input_info.vertexAttributeDescriptionCount = vertex_attribute_desc_max;
-		vertex_input_info.pVertexAttributeDescriptions = attribs;
-
-		VkPipelineInputAssemblyStateCreateInfo input_assembly{};
-		input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-		input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		input_assembly.primitiveRestartEnable = VK_FALSE;
-
-		VkViewport viewport{};
-		viewport.x = 0.0f;
-		viewport.y = 0.0f;
-		viewport.width  = (f32)extent.width;
-		viewport.height = (f32)extent.height;
-		viewport.minDepth = 0.0f;
-		viewport.maxDepth = 1.0f;
-
-		VkRect2D scissor{};
-		scissor.offset = { 0, 0 };
-		scissor.extent = extent;
-
-		VkPipelineViewportStateCreateInfo viewport_state{};
-		viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-		viewport_state.viewportCount = 1;
-		viewport_state.pViewports = &viewport;
-		viewport_state.scissorCount = 1;
-		viewport_state.pScissors = &scissor;
-
-		VkPipelineRasterizationStateCreateInfo rasteriser{};
-		rasteriser.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-		rasteriser.depthClampEnable = VK_FALSE;
-		rasteriser.rasterizerDiscardEnable = VK_FALSE;
-		rasteriser.polygonMode = VK_POLYGON_MODE_FILL;
-		rasteriser.lineWidth = 1.0f;
-		rasteriser.cullMode = VK_CULL_MODE_BACK_BIT;
-		rasteriser.frontFace = VK_FRONT_FACE_CLOCKWISE;
-		rasteriser.depthBiasEnable = VK_FALSE;
-
-		VkPipelineMultisampleStateCreateInfo multisampling{};
-		multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-		multisampling.sampleShadingEnable = VK_FALSE;
-		multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-		VkPipelineColorBlendAttachmentState color_blend_attachment{};
-		color_blend_attachment.colorWriteMask =
-			VK_COLOR_COMPONENT_R_BIT |
-			VK_COLOR_COMPONENT_G_BIT |
-			VK_COLOR_COMPONENT_B_BIT |
-			VK_COLOR_COMPONENT_A_BIT;
-		color_blend_attachment.blendEnable = VK_FALSE;
-
-		VkPipelineColorBlendStateCreateInfo color_blending{};
-		color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-		color_blending.logicOpEnable = VK_FALSE;
-		color_blending.logicOp = VK_LOGIC_OP_COPY;
-		color_blending.attachmentCount = 1;
-		color_blending.pAttachments = &color_blend_attachment;
-
-		VkPipelineLayoutCreateInfo pipeline_layout_info{};
-		pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-
-		if (vkCreatePipelineLayout(handle->device, &pipeline_layout_info, null, &handle->pipeline_layout) != VK_SUCCESS) {
-			abort_with("Failed to create pipeline layout.");
-		}
-
-		VkGraphicsPipelineCreateInfo pipeline_info{};
-		pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-		pipeline_info.stageCount = 2;
-		pipeline_info.pStages = stages;
-		pipeline_info.pVertexInputState = &vertex_input_info;
-		pipeline_info.pInputAssemblyState = &input_assembly;
-		pipeline_info.pViewportState = &viewport_state;
-		pipeline_info.pRasterizationState = &rasteriser;
-		pipeline_info.pMultisampleState = &multisampling;
-		pipeline_info.pDepthStencilState = null;
-		pipeline_info.pColorBlendState = &color_blending;
-		pipeline_info.pDynamicState = null;
-		pipeline_info.layout = handle->pipeline_layout;
-		pipeline_info.renderPass = handle->render_pass;
-		pipeline_info.subpass = 0;
-
-		if (vkCreateGraphicsPipelines(handle->device, VK_NULL_HANDLE, 1, &pipeline_info, null, &handle->pipeline) != VK_SUCCESS) {
-			abort_with("Failed to create pipeline.");
-		}
-
-		vkDestroyShaderModule(handle->device, v_shader, null);
-		vkDestroyShaderModule(handle->device, f_shader, null);
-
-		/* Create framebuffers for the swapchain. */
-		handle->swapchain_framebuffers = new VkFramebuffer[handle->swapchain_image_count];
-		for (u32 i = 0; i < handle->swapchain_image_count; i++) {
-			VkImageView attachments[] = {
-				handle->swapchain_image_views[i]
-			};
-
-			VkFramebufferCreateInfo fb_info{};
-			fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			fb_info.renderPass = handle->render_pass;
-			fb_info.attachmentCount = 1;
-			fb_info.pAttachments = attachments;
-			fb_info.width = extent.width;
-			fb_info.height = extent.height;
-			fb_info.layers = 1;
-
-			if (vkCreateFramebuffer(handle->device, &fb_info, null, &handle->swapchain_framebuffers[i]) != VK_SUCCESS) {
-				abort_with("Failed to create framebuffer.");
-			}
-		}
-
 		/* Create the command pool. */
 		VkCommandPoolCreateInfo pool_info{};
 		pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -755,10 +591,6 @@ namespace vkr {
 			vkDestroyFramebuffer(handle->device, handle->swapchain_framebuffers[i], null);
 		}
 
-		vkDestroyPipeline(handle->device, handle->pipeline, null);
-		vkDestroyPipelineLayout(handle->device, handle->pipeline_layout, null);
-		vkDestroyRenderPass(handle->device, handle->render_pass, null);
-
 		for (u32 i = 0; i < handle->swapchain_image_count; i++) {
 			vkDestroyImageView(handle->device, handle->swapchain_image_views[i], null);
 		}
@@ -774,10 +606,6 @@ namespace vkr {
 		delete[] handle->swapchain_framebuffers;
 
 		delete handle;
-	}
-
-	void VideoContext::record_commands(u32 image) {
-
 	}
 
 	void VideoContext::begin() {
@@ -796,25 +624,9 @@ namespace vkr {
 			warning("Failed to begin the command buffer.");
 			return;
 		}
-
-		VkRenderPassBeginInfo render_pass_info{};
-		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		render_pass_info.renderPass = handle->render_pass;
-		render_pass_info.framebuffer = handle->swapchain_framebuffers[image_id];
-		render_pass_info.renderArea.offset = { 0, 0 };
-		render_pass_info.renderArea.extent = handle->swapchain_extent;
-
-		VkClearValue clear_color = { { { 0.0f, 0.0f, 0.0f, 1.0f } } };
-		render_pass_info.clearValueCount = 1;
-		render_pass_info.pClearValues = &clear_color;
-
-		vkCmdBeginRenderPass(handle->command_buffers[current_frame], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
-		vkCmdBindPipeline(handle->command_buffers[current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, handle->pipeline);
 	}
 
 	void VideoContext::end() {
-		vkCmdEndRenderPass(handle->command_buffers[current_frame]);
-
 		if (vkEndCommandBuffer(handle->command_buffers[current_frame]) != VK_SUCCESS) {
 			warning("Failed to end the command buffer");
 			return;
@@ -858,6 +670,232 @@ namespace vkr {
 
 	void VideoContext::wait_for_done() const {
 		vkDeviceWaitIdle(handle->device);
+	}
+
+	RenderPass::RenderPass(VideoContext* video, 
+		const char* vert_path,
+		const char* frag_path,
+		usize stride, Attribute* attribs, usize attrib_count) : video(video) {
+
+		handle = new impl_RenderPass();
+
+		VkAttachmentDescription color_attachment{};
+		color_attachment.format = video->handle->swapchain_format;
+		color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		color_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		color_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		color_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		color_attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+		VkAttachmentReference color_attachment_ref{};
+		color_attachment_ref.attachment = 0;
+		color_attachment_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkSubpassDescription subpass{};
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &color_attachment_ref;
+
+		VkSubpassDependency dep{};
+		dep.srcSubpass = VK_SUBPASS_EXTERNAL;
+		dep.dstSubpass = 0;
+		dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dep.srcAccessMask = 0;
+		dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+		VkRenderPassCreateInfo render_pass_info{};
+		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		render_pass_info.attachmentCount = 1;
+		render_pass_info.pAttachments = &color_attachment;
+		render_pass_info.subpassCount = 1;
+		render_pass_info.pSubpasses = &subpass;
+		render_pass_info.dependencyCount = 1;
+		render_pass_info.pDependencies = &dep;
+
+		if (vkCreateRenderPass(video->handle->device, &render_pass_info, null, &handle->render_pass)) {
+			abort_with("Failed to create render pass.");
+		}
+
+		u8* v_buf; usize v_size;
+		u8* f_buf; usize f_size;
+
+		read_raw("res/shaders/simple.vert.spv", &v_buf, &v_size);
+		read_raw("res/shaders/simple.frag.spv", &f_buf, &f_size);
+
+		VkShaderModule v_shader = new_shader_module(video->handle->device, v_buf, v_size);
+		VkShaderModule f_shader = new_shader_module(video->handle->device, f_buf, f_size);
+
+		delete[] v_buf;
+		delete[] f_buf;
+
+		VkPipelineShaderStageCreateInfo v_stage_info{};
+		v_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		v_stage_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
+		v_stage_info.module = v_shader;
+		v_stage_info.pName = "main";
+
+		VkPipelineShaderStageCreateInfo f_stage_info{};
+		f_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		f_stage_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		f_stage_info.module = f_shader;
+		f_stage_info.pName = "main";
+
+		VkPipelineShaderStageCreateInfo stages[] = { v_stage_info, f_stage_info };
+
+		VkVertexInputBindingDescription bind_desc;
+		VkVertexInputAttributeDescription* vk_attribs = new VkVertexInputAttributeDescription[attrib_count];
+		render_pass_attributes_to_vk_attributes(attribs, attrib_count, stride, &bind_desc, vk_attribs);
+
+		VkPipelineVertexInputStateCreateInfo vertex_input_info{};
+		vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+		vertex_input_info.vertexBindingDescriptionCount = 1;
+		vertex_input_info.pVertexBindingDescriptions = &bind_desc;
+		vertex_input_info.vertexAttributeDescriptionCount = attrib_count;
+		vertex_input_info.pVertexAttributeDescriptions = vk_attribs;
+
+		VkPipelineInputAssemblyStateCreateInfo input_assembly{};
+		input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+		input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		input_assembly.primitiveRestartEnable = VK_FALSE;
+
+		VkViewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width  = (f32)video->handle->swapchain_extent.width;
+		viewport.height = (f32)video->handle->swapchain_extent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		VkRect2D scissor{};
+		scissor.offset = { 0, 0 };
+		scissor.extent = video->handle->swapchain_extent;
+
+		VkPipelineViewportStateCreateInfo viewport_state{};
+		viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+		viewport_state.viewportCount = 1;
+		viewport_state.pViewports = &viewport;
+		viewport_state.scissorCount = 1;
+		viewport_state.pScissors = &scissor;
+
+		VkPipelineRasterizationStateCreateInfo rasteriser{};
+		rasteriser.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+		rasteriser.depthClampEnable = VK_FALSE;
+		rasteriser.rasterizerDiscardEnable = VK_FALSE;
+		rasteriser.polygonMode = VK_POLYGON_MODE_FILL;
+		rasteriser.lineWidth = 1.0f;
+		rasteriser.cullMode = VK_CULL_MODE_BACK_BIT;
+		rasteriser.frontFace = VK_FRONT_FACE_CLOCKWISE;
+		rasteriser.depthBiasEnable = VK_FALSE;
+
+		VkPipelineMultisampleStateCreateInfo multisampling{};
+		multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+		multisampling.sampleShadingEnable = VK_FALSE;
+		multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+		VkPipelineColorBlendAttachmentState color_blend_attachment{};
+		color_blend_attachment.colorWriteMask =
+			VK_COLOR_COMPONENT_R_BIT |
+			VK_COLOR_COMPONENT_G_BIT |
+			VK_COLOR_COMPONENT_B_BIT |
+			VK_COLOR_COMPONENT_A_BIT;
+		color_blend_attachment.blendEnable = VK_FALSE;
+
+		VkPipelineColorBlendStateCreateInfo color_blending{};
+		color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+		color_blending.logicOpEnable = VK_FALSE;
+		color_blending.logicOp = VK_LOGIC_OP_COPY;
+		color_blending.attachmentCount = 1;
+		color_blending.pAttachments = &color_blend_attachment;
+
+		VkPipelineLayoutCreateInfo pipeline_layout_info{};
+		pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+
+		if (vkCreatePipelineLayout(video->handle->device, &pipeline_layout_info, null, &handle->pipeline_layout) != VK_SUCCESS) {
+			abort_with("Failed to create pipeline layout.");
+		}
+
+		VkGraphicsPipelineCreateInfo pipeline_info{};
+		pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+		pipeline_info.stageCount = 2;
+		pipeline_info.pStages = stages;
+		pipeline_info.pVertexInputState = &vertex_input_info;
+		pipeline_info.pInputAssemblyState = &input_assembly;
+		pipeline_info.pViewportState = &viewport_state;
+		pipeline_info.pRasterizationState = &rasteriser;
+		pipeline_info.pMultisampleState = &multisampling;
+		pipeline_info.pDepthStencilState = null;
+		pipeline_info.pColorBlendState = &color_blending;
+		pipeline_info.pDynamicState = null;
+		pipeline_info.layout = handle->pipeline_layout;
+		pipeline_info.renderPass = handle->render_pass;
+		pipeline_info.subpass = 0;
+
+		if (vkCreateGraphicsPipelines(video->handle->device, VK_NULL_HANDLE, 1, &pipeline_info, null, &handle->pipeline) != VK_SUCCESS) {
+			abort_with("Failed to create pipeline.");
+		}
+
+		vkDestroyShaderModule(video->handle->device, v_shader, null);
+		vkDestroyShaderModule(video->handle->device, f_shader, null);
+
+		/* Create framebuffers for the swapchain.
+		 *
+		 * TODO: Move this to `make_default`. */
+		video->handle->swapchain_framebuffers = new VkFramebuffer[video->handle->swapchain_image_count];
+		for (u32 i = 0; i < video->handle->swapchain_image_count; i++) {
+			VkImageView attachments[] = {
+				video->handle->swapchain_image_views[i]
+			};
+
+			VkFramebufferCreateInfo fb_info{};
+			fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			fb_info.renderPass = handle->render_pass;
+			fb_info.attachmentCount = 1;
+			fb_info.pAttachments = attachments;
+			fb_info.width =  video->handle->swapchain_extent.width;
+			fb_info.height = video->handle->swapchain_extent.height;
+			fb_info.layers = 1;
+
+			if (vkCreateFramebuffer(video->handle->device, &fb_info, null, &video->handle->swapchain_framebuffers[i]) != VK_SUCCESS) {
+				abort_with("Failed to create framebuffer.");
+			}
+		}
+
+		delete[] vk_attribs;
+	}
+
+	RenderPass::~RenderPass() {
+		vkDestroyPipeline(video->handle->device, handle->pipeline, null);
+		vkDestroyPipelineLayout(video->handle->device, handle->pipeline_layout, null);
+		vkDestroyRenderPass(video->handle->device, handle->render_pass, null);
+	}
+
+	void RenderPass::make_default() {
+		
+	}
+
+	void RenderPass::begin() {
+		/* TODO: pass a framebuffer into here? */
+
+		VkRenderPassBeginInfo render_pass_info{};
+		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		render_pass_info.renderPass = handle->render_pass;
+		render_pass_info.framebuffer = video->handle->swapchain_framebuffers[video->image_id];
+		render_pass_info.renderArea.offset = { 0, 0 };
+		render_pass_info.renderArea.extent = video->handle->swapchain_extent;
+
+		VkClearValue clear_color = { { { 0.0f, 0.0f, 0.0f, 1.0f } } };
+		render_pass_info.clearValueCount = 1;
+		render_pass_info.pClearValues = &clear_color;
+
+		vkCmdBeginRenderPass(video->handle->command_buffers[video->current_frame], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBindPipeline(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, handle->pipeline);
+	}
+
+	void RenderPass::end() {
+		vkCmdEndRenderPass(video->handle->command_buffers[video->current_frame]);
 	}
 
 	Buffer::Buffer(VideoContext* video) : video(video) {
