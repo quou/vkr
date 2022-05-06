@@ -50,4 +50,8 @@ namespace vkr {
 		VkPipelineLayout pipeline_layout;
 		VkPipeline pipeline;
 	};
+
+	struct impl_Shader {
+		VkShaderModule v_shader, f_shader;
+	};
 };

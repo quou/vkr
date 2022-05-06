@@ -29,6 +29,7 @@ namespace vkr {
 	struct impl_Buffer;
 	struct impl_RenderPass;
 	struct impl_VideoContext;
+	struct impl_Shader;
 
 	/* Class forward declarations. */
 	class App;
@@ -36,6 +37,7 @@ namespace vkr {
 	class IndexBuffer;
 	class RenderPass3D;
 	class RenderPass;
+	class Shader;
 	class Shader;
 	class VertexBuffer;
 	class VideoContext;
@@ -84,7 +86,7 @@ namespace vkr {
 			} type;
 		};
 
-		RenderPass(VideoContext* video, const char* vert_path, const char* frag_path, usize stride, Attribute* attribs, usize attrib_count);
+		RenderPass(VideoContext* video, Shader* shader, usize stride, Attribute* attribs, usize attrib_count);
 		virtual ~RenderPass();
 
 		void make_default();
@@ -147,5 +149,17 @@ namespace vkr {
 
 		void begin();
 		void end();
+	};
+
+	class Shader {
+	private:
+		impl_Shader* handle;
+		VideoContext* video;
+
+		friend class RenderPass;
+	public:
+		Shader(VideoContext* video, const u8* v_buf, const u8* f_buf, usize v_size, usize f_size);
+		static Shader* from_file(VideoContext* video, const char* vert_path, const char* frag_path);
+		~Shader();
 	};
 };

@@ -229,7 +229,7 @@ namespace vkr {
 		return true;
 	}
 
-	static VkShaderModule new_shader_module(VkDevice device, u8* code, usize code_size) {
+	static VkShaderModule new_shader_module(VkDevice device, const u8* code, usize code_size) {
 		VkShaderModuleCreateInfo info{};
 		info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 		info.codeSize = code_size;
@@ -672,11 +672,7 @@ namespace vkr {
 		vkDeviceWaitIdle(handle->device);
 	}
 
-	RenderPass::RenderPass(VideoContext* video, 
-		const char* vert_path,
-		const char* frag_path,
-		usize stride, Attribute* attribs, usize attrib_count) : video(video) {
-
+	RenderPass::RenderPass(VideoContext* video, Shader* shader, usize stride, Attribute* attribs, usize attrib_count) : video(video) {
 		handle = new impl_RenderPass();
 
 		VkAttachmentDescription color_attachment{};
@@ -719,28 +715,16 @@ namespace vkr {
 			abort_with("Failed to create render pass.");
 		}
 
-		u8* v_buf; usize v_size;
-		u8* f_buf; usize f_size;
-
-		read_raw("res/shaders/simple.vert.spv", &v_buf, &v_size);
-		read_raw("res/shaders/simple.frag.spv", &f_buf, &f_size);
-
-		VkShaderModule v_shader = new_shader_module(video->handle->device, v_buf, v_size);
-		VkShaderModule f_shader = new_shader_module(video->handle->device, f_buf, f_size);
-
-		delete[] v_buf;
-		delete[] f_buf;
-
 		VkPipelineShaderStageCreateInfo v_stage_info{};
 		v_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 		v_stage_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-		v_stage_info.module = v_shader;
+		v_stage_info.module = shader->handle->v_shader;
 		v_stage_info.pName = "main";
 
 		VkPipelineShaderStageCreateInfo f_stage_info{};
 		f_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 		f_stage_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-		f_stage_info.module = f_shader;
+		f_stage_info.module = shader->handle->f_shader;
 		f_stage_info.pName = "main";
 
 		VkPipelineShaderStageCreateInfo stages[] = { v_stage_info, f_stage_info };
@@ -836,9 +820,6 @@ namespace vkr {
 		if (vkCreateGraphicsPipelines(video->handle->device, VK_NULL_HANDLE, 1, &pipeline_info, null, &handle->pipeline) != VK_SUCCESS) {
 			abort_with("Failed to create pipeline.");
 		}
-
-		vkDestroyShaderModule(video->handle->device, v_shader, null);
-		vkDestroyShaderModule(video->handle->device, f_shader, null);
 
 		delete[] vk_attribs;
 	}
@@ -972,5 +953,32 @@ namespace vkr {
 	void IndexBuffer::draw() {
 		vkCmdBindIndexBuffer(video->handle->command_buffers[video->current_frame], handle->buffer, 0, VK_INDEX_TYPE_UINT16);
 		vkCmdDrawIndexed(video->handle->command_buffers[video->current_frame], count, 1, 0, 0, 0);
+	}
+
+	Shader::Shader(VideoContext* video, const u8* v_buf, const u8* f_buf, usize v_size, usize f_size) : video(video) {
+		handle = new impl_Shader();
+
+		handle->v_shader = new_shader_module(video->handle->device, v_buf, v_size);
+		handle->f_shader = new_shader_module(video->handle->device, f_buf, f_size);
+
+		delete[] v_buf;
+		delete[] f_buf;
+	}
+
+	Shader* Shader::from_file(VideoContext* video, const char* vert_path, const char* frag_path) {
+		u8* v_buf; usize v_size;
+		u8* f_buf; usize f_size;
+
+		read_raw(vert_path, &v_buf, &v_size);
+		read_raw(frag_path, &f_buf, &f_size);
+
+		return new Shader(video, v_buf, f_buf, v_size, f_size);
+	}
+
+	Shader::~Shader() {
+		vkDestroyShaderModule(video->handle->device, handle->v_shader, null);
+		vkDestroyShaderModule(video->handle->device, handle->f_shader, null);
+
+		delete handle;
 	}
 };

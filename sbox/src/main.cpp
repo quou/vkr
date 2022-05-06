@@ -9,11 +9,17 @@ private:
 	VertexBuffer* vb;
 	IndexBuffer* ib;
 
+	Shader* shader;
+
 	RenderPass* pass;
 public:
 	SandboxApp() : App("Sandbox", vkr::v2i(800, 600)) {}
 
 	void on_init() override {
+		shader = Shader::from_file(video, 
+			"res/shaders/simple.vert.spv",
+			"res/shaders/simple.frag.spv");
+
 		RenderPass::Attribute attribs[] = {
 			{
 				0,
@@ -22,10 +28,7 @@ public:
 			}
 		};
 
-		pass = new RenderPass(video,
-			"res/shaders/simple.vert.spv",
-			"res/shaders/simple.frag.spv",
-			sizeof(Vertex), attribs, 1);
+		pass = new RenderPass(video, shader, sizeof(Vertex), attribs, 1);
 		pass->make_default();
 
 		Vertex verts[] = {
@@ -55,6 +58,7 @@ public:
 		delete ib;
 
 		delete pass;
+		delete shader;
 	}
 };
 
