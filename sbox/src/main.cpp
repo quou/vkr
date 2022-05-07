@@ -70,6 +70,8 @@ public:
 			vb->bind();
 			matrices.transform = m4f::translate(m4f::identity(), v3f(-0.5f, -0.5f, 0.0f)),
 			ib->draw();
+			matrices.transform = m4f::translate(m4f::identity(), v3f(0.5f, 0.5f, 0.0f)),
+			ib->draw();
 		pip->end();
 	}
 

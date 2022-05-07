@@ -155,6 +155,8 @@ namespace vkr {
 		u32 current_frame;
 		u32 image_id;
 
+		usize object_count;
+
 		Pipeline* pipeline;
 
 		friend class Buffer;
