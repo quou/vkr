@@ -4,6 +4,10 @@
 
 using namespace vkr;
 
+struct MatrixBuffer {
+	m4f transform;
+};
+
 class SandboxApp : public vkr::App {
 private:
 	VertexBuffer* vb;
@@ -12,6 +16,8 @@ private:
 	Shader* shader;
 
 	Pipeline* pip;
+
+	MatrixBuffer matrices;
 public:
 	SandboxApp() : App("Sandbox", vkr::v2i(800, 600)) {}
 
@@ -20,15 +26,28 @@ public:
 			"res/shaders/simple.vert.spv",
 			"res/shaders/simple.frag.spv");
 
+		matrices.transform = m4f::identity();
+
 		Pipeline::Attribute attribs[] = {
 			{
-				0,
-				offsetof(Vertex, position),
-				Pipeline::Attribute::Type::float2
+				.location = 0,
+				.offset = offsetof(Vertex, position),
+				.type = Pipeline::Attribute::Type::float2
 			}
 		};
 
-		pip = new Pipeline(video, shader, sizeof(Vertex), attribs, 1);
+		Pipeline::UniformBuffer ubuffers[] = {
+			{
+				.binding = 0,
+				.ptr     = &matrices,
+				.size    = sizeof(MatrixBuffer),
+				.rate    = Pipeline::UniformBuffer::Rate::per_draw,
+				.stage   = Pipeline::UniformBuffer::Stage::vertex
+			}
+		};
+
+		pip = new Pipeline(video, shader, sizeof(Vertex),
+			attribs, 1, ubuffers, 1);
 		pip->make_default();
 
 		Vertex verts[] = {
@@ -49,6 +68,7 @@ public:
 	void on_update(f64 ts) override {
 		pip->begin();
 			vb->bind();
+			matrices.transform = m4f::translate(m4f::identity(), v3f(-0.5f, -0.5f, 0.0f)),
 			ib->draw();
 		pip->end();
 	}

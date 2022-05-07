@@ -39,6 +39,7 @@ namespace vkr {
 	class Pipeline;
 	class Shader;
 	class Shader;
+	class UniformBuffer;
 	class VertexBuffer;
 	class VideoContext;
 
@@ -76,6 +77,10 @@ namespace vkr {
 	protected:
 		VideoContext* video;
 		impl_Pipeline* handle;
+
+		usize uniform_count;
+
+		friend class IndexBuffer;
 	public:
 		struct Attribute {
 			u32 location;
@@ -86,7 +91,23 @@ namespace vkr {
 			} type;
 		};
 
-		Pipeline(VideoContext* video, Shader* shader, usize stride, Attribute* attribs, usize attrib_count);
+		struct UniformBuffer {
+			u32 binding;
+			void* ptr;
+			usize size;
+
+			enum class Rate {
+				per_draw, per_frame
+			} rate;
+
+			enum class Stage {
+				vertex, fragment
+			} stage;
+		};
+
+		Pipeline(VideoContext* video, Shader* shader, usize stride,
+			Attribute* attribs, usize attrib_count,
+			UniformBuffer* uniforms, usize uniform_count);
 		virtual ~Pipeline();
 
 		void make_default();
@@ -133,6 +154,8 @@ namespace vkr {
 
 		u32 current_frame;
 		u32 image_id;
+
+		Pipeline* pipeline;
 
 		friend class Buffer;
 		friend class IndexBuffer;
