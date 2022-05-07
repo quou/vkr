@@ -27,7 +27,7 @@ namespace vkr {
 	 * namely glfw3.h and vulkan.h. */
 	struct impl_App;
 	struct impl_Buffer;
-	struct impl_RenderPass;
+	struct impl_Pipeline;
 	struct impl_VideoContext;
 	struct impl_Shader;
 
@@ -35,8 +35,8 @@ namespace vkr {
 	class App;
 	class Buffer;
 	class IndexBuffer;
-	class RenderPass3D;
-	class RenderPass;
+	class Pipeline3D;
+	class Pipeline;
 	class Shader;
 	class Shader;
 	class VertexBuffer;
@@ -70,12 +70,12 @@ namespace vkr {
 		v2i get_size() const;
 	};
 
-	/* The RenderPass class and its children take care of
+	/* The Pipeline class and its children take care of
 	 * of managing a Vulkan pipeline and render pass. */
-	class VKR_API RenderPass {
+	class VKR_API Pipeline {
 	protected:
 		VideoContext* video;
-		impl_RenderPass* handle;
+		impl_Pipeline* handle;
 	public:
 		struct Attribute {
 			u32 location;
@@ -86,8 +86,8 @@ namespace vkr {
 			} type;
 		};
 
-		RenderPass(VideoContext* video, Shader* shader, usize stride, Attribute* attribs, usize attrib_count);
-		virtual ~RenderPass();
+		Pipeline(VideoContext* video, Shader* shader, usize stride, Attribute* attribs, usize attrib_count);
+		virtual ~Pipeline();
 
 		void make_default();
 
@@ -136,7 +136,7 @@ namespace vkr {
 
 		friend class Buffer;
 		friend class IndexBuffer;
-		friend class RenderPass;
+		friend class Pipeline;
 		friend class VertexBuffer;
 	public:
 		impl_VideoContext* handle;
@@ -156,7 +156,7 @@ namespace vkr {
 		impl_Shader* handle;
 		VideoContext* video;
 
-		friend class RenderPass;
+		friend class Pipeline;
 	public:
 		Shader(VideoContext* video, const u8* v_buf, const u8* f_buf, usize v_size, usize f_size);
 		static Shader* from_file(VideoContext* video, const char* vert_path, const char* frag_path);

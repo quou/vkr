@@ -27,6 +27,10 @@ namespace vkr {
 		std::optional<u32> present;
 	};
 
+	struct MatrixBuffer {
+		m4f transform;
+	};
+
 	struct SwapChainCapabilities {
 		VkSurfaceCapabilitiesKHR capabilities;
 		u32 format_count;       VkSurfaceFormatKHR* formats;
@@ -243,10 +247,10 @@ namespace vkr {
 		return m;
 	}
 
-	/* Converts an array of RenderPass::Attributes into an array of
+	/* Converts an array of Pipeline::Attributes into an array of
 	 * VkVertexInputInputAttributeDescriptions and a VkVertexInputBindingDescription */
 	static void render_pass_attributes_to_vk_attributes(
-		RenderPass::Attribute* attribs,
+		Pipeline::Attribute* attribs,
 		usize attrib_count,
 		usize stride,
 		VkVertexInputBindingDescription* vk_desc,
@@ -259,7 +263,7 @@ namespace vkr {
 		vk_desc->inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
 		for (usize i = 0; i < attrib_count; i++) {
-			RenderPass::Attribute* attrib = attribs + i;
+			Pipeline::Attribute* attrib = attribs + i;
 			VkVertexInputAttributeDescription* vk_attrib = vk_attribs + i;
 
 			memset(vk_attrib, 0, sizeof(VkVertexInputAttributeDescription));
@@ -269,16 +273,16 @@ namespace vkr {
 			vk_attrib->offset = attrib->offset;
 
 			switch (attrib->type) {
-			case RenderPass::Attribute::Type::float1:
+			case Pipeline::Attribute::Type::float1:
 				vk_attrib->format = VK_FORMAT_R32_SFLOAT;
 				break;
-			case RenderPass::Attribute::Type::float2:
+			case Pipeline::Attribute::Type::float2:
 				vk_attrib->format = VK_FORMAT_R32G32_SFLOAT;
 				break;
-			case RenderPass::Attribute::Type::float3:
+			case Pipeline::Attribute::Type::float3:
 				vk_attrib->format = VK_FORMAT_R32G32B32_SFLOAT;
 				break;
-			case RenderPass::Attribute::Type::float4:
+			case Pipeline::Attribute::Type::float4:
 				vk_attrib->format = VK_FORMAT_R32G32B32A32_SFLOAT;
 				break;
 			default: break;
@@ -670,8 +674,8 @@ namespace vkr {
 		vkDeviceWaitIdle(handle->device);
 	}
 
-	RenderPass::RenderPass(VideoContext* video, Shader* shader, usize stride, Attribute* attribs, usize attrib_count) : video(video) {
-		handle = new impl_RenderPass();
+	Pipeline::Pipeline(VideoContext* video, Shader* shader, usize stride, Attribute* attribs, usize attrib_count) : video(video) {
+		handle = new impl_Pipeline();
 
 		VkAttachmentDescription color_attachment{};
 		color_attachment.format = video->handle->swapchain_format;
@@ -792,8 +796,84 @@ namespace vkr {
 		color_blending.attachmentCount = 1;
 		color_blending.pAttachments = &color_blend_attachment;
 
+		/* Create the descriptor layout. */
+		VkDescriptorSetLayoutBinding layout_binding{};
+		layout_binding.binding = 0;
+		layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		layout_binding.descriptorCount = 1;
+		layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		layout_binding.pImmutableSamplers = null;
+
+		VkDescriptorSetLayoutCreateInfo layout_info{};
+		layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layout_info.bindingCount = 1;
+		layout_info.pBindings = &layout_binding;
+
+		if (vkCreateDescriptorSetLayout(video->handle->device, &layout_info, null, &handle->descriptor_set_layout) != VK_SUCCESS) {
+			abort_with("Failed to create descriptor set layout.");
+		}
+
+		/* Create uniform buffers. */
+		VkDeviceSize buffer_size = sizeof(MatrixBuffer);
+		for (u32 i = 0; i < max_frames_in_flight; i++) {
+			new_buffer(video->handle, buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				handle->uniform_buffers + i, handle->uniform_buffer_memories + i);
+		}
+
+		/* Create descriptor pools. */
+		VkDescriptorPoolSize pool_size{};
+		pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		pool_size.descriptorCount = max_frames_in_flight;
+
+		VkDescriptorPoolCreateInfo pool_info{};
+		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		pool_info.poolSizeCount = 1;
+		pool_info.pPoolSizes = &pool_size;
+		pool_info.maxSets = max_frames_in_flight;
+
+		if (vkCreateDescriptorPool(video->handle->device, &pool_info, null, &handle->descriptor_pool) != VK_SUCCESS) {
+			abort_with("Failed to create descriptor pool.");
+		}
+
+		/* Create descriptor set. */
+		VkDescriptorSetLayout layouts[max_frames_in_flight];
+		for (u32 i = 0; i < max_frames_in_flight; i++) {
+			layouts[i] = handle->descriptor_set_layout;
+		}
+
+		VkDescriptorSetAllocateInfo desc_set_alloc_info{};
+		desc_set_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		desc_set_alloc_info.descriptorPool = handle->descriptor_pool;
+		desc_set_alloc_info.descriptorSetCount = max_frames_in_flight;
+		desc_set_alloc_info.pSetLayouts = layouts;
+
+		if (vkAllocateDescriptorSets(video->handle->device, &desc_set_alloc_info, handle->descriptor_sets) != VK_SUCCESS) {
+			abort_with("Failed to allocate descriptor sets.");
+		}
+
+		for (u32 i = 0; i < max_frames_in_flight; i++) {
+			VkDescriptorBufferInfo buffer_info{};
+			buffer_info.buffer = handle->uniform_buffers[i];
+			buffer_info.offset = 0;
+			buffer_info.range = sizeof(MatrixBuffer);
+
+			VkWriteDescriptorSet desc_write{};
+			desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			desc_write.dstSet = handle->descriptor_sets[i];
+			desc_write.dstBinding = 0;
+			desc_write.dstArrayElement = 0;
+			desc_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			desc_write.descriptorCount = 1;
+			desc_write.pBufferInfo = &buffer_info;
+
+			vkUpdateDescriptorSets(video->handle->device, 1, &desc_write, 0, null);
+		}
+
 		VkPipelineLayoutCreateInfo pipeline_layout_info{};
 		pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipeline_layout_info.setLayoutCount = 1;
+		pipeline_layout_info.pSetLayouts = &handle->descriptor_set_layout;
 
 		if (vkCreatePipelineLayout(video->handle->device, &pipeline_layout_info, null, &handle->pipeline_layout) != VK_SUCCESS) {
 			abort_with("Failed to create pipeline layout.");
@@ -822,13 +902,21 @@ namespace vkr {
 		delete[] vk_attribs;
 	}
 
-	RenderPass::~RenderPass() {
+	Pipeline::~Pipeline() {
+		for (u32 i = 0; i < max_frames_in_flight; i++) {
+			vkDestroyBuffer(video->handle->device, handle->uniform_buffers[i], null);
+			vkFreeMemory(video->handle->device, handle->uniform_buffer_memories[i], null);
+		}
+
+		vkDestroyDescriptorPool(video->handle->device, handle->descriptor_pool, null);
+		vkDestroyDescriptorSetLayout(video->handle->device, handle->descriptor_set_layout, null);
+
 		vkDestroyPipeline(video->handle->device, handle->pipeline, null);
 		vkDestroyPipelineLayout(video->handle->device, handle->pipeline_layout, null);
 		vkDestroyRenderPass(video->handle->device, handle->render_pass, null);
 	}
 
-	void RenderPass::make_default() {
+	void Pipeline::make_default() {
 		/* Create framebuffers for the swapchain. */
 		video->handle->swapchain_framebuffers = new VkFramebuffer[video->handle->swapchain_image_count];
 		for (u32 i = 0; i < video->handle->swapchain_image_count; i++) {
@@ -852,8 +940,18 @@ namespace vkr {
 
 	}
 
-	void RenderPass::begin() {
+	void Pipeline::begin() {
 		/* TODO: pass a framebuffer into here? */
+
+		MatrixBuffer matrices = {
+			m4f::translate(m4f::identity(), v3f(0.0f, -1.0f, 0.0f))
+		};
+
+		/* Update the uniform buffer. */
+		void* uniform_data;
+		vkMapMemory(video->handle->device, handle->uniform_buffer_memories[video->current_frame], 0, sizeof(MatrixBuffer), 0, &uniform_data);
+		memcpy(uniform_data, &matrices, sizeof(matrices));
+		vkUnmapMemory(video->handle->device, handle->uniform_buffer_memories[video->current_frame]);
 
 		VkRenderPassBeginInfo render_pass_info{};
 		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -868,9 +966,12 @@ namespace vkr {
 
 		vkCmdBeginRenderPass(video->handle->command_buffers[video->current_frame], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, handle->pipeline);
+
+		vkCmdBindDescriptorSets(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
+			handle->pipeline_layout, 0, 1, &handle->descriptor_sets[video->current_frame], 0, null);
 	}
 
-	void RenderPass::end() {
+	void Pipeline::end() {
 		vkCmdEndRenderPass(video->handle->command_buffers[video->current_frame]);
 	}
 

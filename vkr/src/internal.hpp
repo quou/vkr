@@ -48,10 +48,17 @@ namespace vkr {
 		VkDeviceMemory memory;
 	};
 
-	struct impl_RenderPass {
+	struct impl_Pipeline {
 		VkRenderPass render_pass;
 		VkPipelineLayout pipeline_layout;
 		VkPipeline pipeline;
+
+		VkDescriptorSetLayout descriptor_set_layout;
+		VkDescriptorPool descriptor_pool;
+
+		VkBuffer uniform_buffers[max_frames_in_flight];
+		VkDeviceMemory uniform_buffer_memories[max_frames_in_flight];
+		VkDescriptorSet descriptor_sets[max_frames_in_flight];
 	};
 
 	struct impl_Shader {

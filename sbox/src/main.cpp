@@ -11,7 +11,7 @@ private:
 
 	Shader* shader;
 
-	RenderPass* pass;
+	Pipeline* pip;
 public:
 	SandboxApp() : App("Sandbox", vkr::v2i(800, 600)) {}
 
@@ -20,16 +20,16 @@ public:
 			"res/shaders/simple.vert.spv",
 			"res/shaders/simple.frag.spv");
 
-		RenderPass::Attribute attribs[] = {
+		Pipeline::Attribute attribs[] = {
 			{
 				0,
 				offsetof(Vertex, position),
-				RenderPass::Attribute::Type::float2
+				Pipeline::Attribute::Type::float2
 			}
 		};
 
-		pass = new RenderPass(video, shader, sizeof(Vertex), attribs, 1);
-		pass->make_default();
+		pip = new Pipeline(video, shader, sizeof(Vertex), attribs, 1);
+		pip->make_default();
 
 		Vertex verts[] = {
 			{{-0.5f, -0.5f}},
@@ -47,17 +47,17 @@ public:
 	}
 
 	void on_update(f64 ts) override {
-		pass->begin();
+		pip->begin();
 			vb->bind();
 			ib->draw();
-		pass->end();
+		pip->end();
 	}
 
 	void on_deinit() override {
 		delete vb;
 		delete ib;
 
-		delete pass;
+		delete pip;
 		delete shader;
 	}
 };
