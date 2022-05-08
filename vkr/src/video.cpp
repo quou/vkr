@@ -10,7 +10,10 @@
 #include "vkr.hpp"
 #include "internal.hpp"
 
-#define max_objects 256
+/* The vulkan spec only requires 128 byte
+ * push constants, so that's the maximum that
+ * this renderer will use. */
+#define max_push_const_size 128
 
 namespace vkr {
 	static const char* validation_layers[] = {
@@ -674,7 +677,9 @@ namespace vkr {
 
 	Pipeline::Pipeline(VideoContext* video, Shader* shader, usize stride,
 			Attribute* attribs, usize attrib_count,
-			UniformBuffer* uniforms, usize uniform_count) : video(video), uniform_count(uniform_count) {
+			UniformBuffer* uniforms, usize uniform_count,
+			PushConstantRange* pcranges, usize pcrange_count) :
+			video(video), uniform_count(uniform_count) {
 		handle = new impl_Pipeline();
 
 		VkAttachmentDescription color_attachment{};
@@ -804,7 +809,7 @@ namespace vkr {
 			layout_bindings[i].binding = uniforms[i].binding;
 			layout_bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 			layout_bindings[i].descriptorCount = 1;
-			layout_bindings[i].stageFlags = uniforms[i].stage == UniformBuffer::Stage::vertex ?
+			layout_bindings[i].stageFlags = uniforms[i].stage == Stage::vertex ?
 				VK_SHADER_STAGE_VERTEX_BIT :
 				VK_SHADER_STAGE_FRAGMENT_BIT;
 			layout_bindings[i].pImmutableSamplers = null;
@@ -883,14 +888,29 @@ namespace vkr {
 			}
 		}
 
+		auto pc_ranges = new VkPushConstantRange[pcrange_count];
+		for (usize i = 0; i < pcrange_count; i++) {
+			memset(pc_ranges + i, 0, sizeof(*pc_ranges));
+			pc_ranges[i].stageFlags = pcranges[i].stage ==Stage::vertex ?
+				VK_SHADER_STAGE_VERTEX_BIT :
+				VK_SHADER_STAGE_FRAGMENT_BIT;
+			pc_ranges[i].offset = 0;
+			pc_ranges[i].size = pcranges[i].size;
+		}
+
 		VkPipelineLayoutCreateInfo pipeline_layout_info{};
 		pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipeline_layout_info.setLayoutCount = 1;
 		pipeline_layout_info.pSetLayouts = &handle->descriptor_set_layout;
+		pipeline_layout_info.pushConstantRangeCount = pcrange_count;
+		pipeline_layout_info.pPushConstantRanges = pc_ranges;
 
 		if (vkCreatePipelineLayout(video->handle->device, &pipeline_layout_info, null, &handle->pipeline_layout) != VK_SUCCESS) {
 			abort_with("Failed to create pipeline layout.");
 		}
+
+		delete[] pc_ranges;
+		delete[] layout_bindings;
 
 		VkGraphicsPipelineCreateInfo pipeline_info{};
 		pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -989,6 +1009,20 @@ namespace vkr {
 		vkCmdEndRenderPass(video->handle->command_buffers[video->current_frame]);
 	}
 
+	void Pipeline::push_constant(Stage stage, const void* ptr, usize size) {
+#ifdef DEBUG
+		if (size > max_push_const_size) {
+			abort_with("Push constant too big. Use a uniform buffer instead.");
+		}
+#endif
+
+		vkCmdPushConstants(video->handle->command_buffers[video->current_frame], handle->pipeline_layout,
+		stage == Stage::vertex ?
+			VK_SHADER_STAGE_VERTEX_BIT :
+			VK_SHADER_STAGE_FRAGMENT_BIT,
+		0, size, ptr);
+	}
+
 	Buffer::Buffer(VideoContext* video) : video(video) {
 		handle = new impl_Buffer();
 	}
@@ -997,11 +1031,9 @@ namespace vkr {
 		delete handle;
 	}
 
-	VertexBuffer::VertexBuffer(VideoContext* video, Vertex* verts, usize count) : Buffer(video) {
+	VertexBuffer::VertexBuffer(VideoContext* video, void* verts, usize size) : Buffer(video) {
 		VkBuffer stage_buffer;
 		VkDeviceMemory stage_buffer_memory;
-
-		const usize size = sizeof(count) * sizeof(Vertex);
 
 		new_buffer(video->handle, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,

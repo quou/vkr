@@ -12,6 +12,10 @@ struct ColorBuffer {
 	v3f color;
 };
 
+struct Vertex {
+	v2f position;
+};
+
 class SandboxApp : public vkr::App {
 private:
 	VertexBuffer* vb;
@@ -46,18 +50,25 @@ public:
 				.binding = 0,
 				.ptr     = &matrices,
 				.size    = sizeof(MatrixBuffer),
-				.stage   = Pipeline::UniformBuffer::Stage::vertex
+				.stage   = Pipeline::Stage::vertex
 			},
 			{
 				.binding = 1,
 				.ptr     = &colors,
 				.size    = sizeof(ColorBuffer),
-				.stage   = Pipeline::UniformBuffer::Stage::fragment
+				.stage   = Pipeline::Stage::fragment
+			}
+		};
+
+		Pipeline::PushConstantRange pcranges[] = {
+			{
+				.size = sizeof(m4f),
+				.stage = Pipeline::Stage::vertex
 			}
 		};
 
 		pip = new Pipeline(video, shader, sizeof(Vertex),
-			attribs, 1, ubuffers, 2);
+			attribs, 1, ubuffers, 2, pcranges, 1);
 		pip->make_default();
 
 		Vertex verts[] = {
@@ -71,18 +82,24 @@ public:
 			0, 1, 2, 2, 3, 0
 		};
 
-		vb = new VertexBuffer(video, verts, sizeof(verts) / sizeof(*verts));
+		vb = new VertexBuffer(video, verts, sizeof(verts));
 		ib = new IndexBuffer(video, indices, sizeof(indices) / sizeof(*indices));
 	}
 
 	void on_update(f64 ts) override {
+		colors.color = v3f(1.0f, 1.0, 0.0f);
+
+		m4f transform;
+
 		pip->begin();
 			vb->bind();
-			matrices.transform = m4f::translate(m4f::identity(), v3f(-0.5f, -0.5f, 0.0f)),
-			colors.color = v3f(1.0f, 1.0, 1.0f);
+
+			transform = m4f::translate(m4f::identity(), v3f(-0.5f, -0.5f, 0.0f));
+			pip->push_constant(Pipeline::Stage::vertex, transform);
 			ib->draw();
-			matrices.transform = m4f::translate(m4f::identity(), v3f(0.5f, 0.5f, 0.0f)),
-			colors.color = v3f(1.0f, 1.0, 0.0f);
+
+			transform = m4f::translate(m4f::identity(), v3f(0.5f, 0.5f, 0.0f));
+			pip->push_constant(Pipeline::Stage::vertex, transform);
 			ib->draw();
 		pip->end();
 	}

@@ -82,6 +82,10 @@ namespace vkr {
 
 		friend class IndexBuffer;
 	public:
+		enum class Stage {
+			vertex, fragment
+		};
+	
 		struct Attribute {
 			u32 location;
 			usize offset;
@@ -96,24 +100,31 @@ namespace vkr {
 			void* ptr;
 			usize size;
 
-			enum class Stage {
-				vertex, fragment
-			} stage;
+			Stage stage;
+		};
+
+		struct PushConstantRange {
+			usize size;
+			Stage stage;
 		};
 
 		Pipeline(VideoContext* video, Shader* shader, usize stride,
 			Attribute* attribs, usize attrib_count,
-			UniformBuffer* uniforms, usize uniform_count);
+			UniformBuffer* uniforms = null, usize uniform_count = 0,
+			PushConstantRange* pcranges = null, usize pcrange_count = 0);
 		virtual ~Pipeline();
 
 		void make_default();
 
 		void begin();
 		void end();
-	};
 
-	struct Vertex {
-		v2f position;
+		void push_constant(Stage stage, const void* ptr, usize size);
+
+		template <typename T>
+		void push_constant(Stage stage, const T& c) {
+			push_constant(stage, &c, sizeof(T));
+		}
 	};
 
 	class VKR_API Buffer {
@@ -127,7 +138,7 @@ namespace vkr {
 
 	class VKR_API VertexBuffer : public Buffer {
 	public:
-		VertexBuffer(VideoContext* video, Vertex* verts, usize count);
+		VertexBuffer(VideoContext* video, void* verts, usize size);
 		~VertexBuffer();
 
 		void bind();
