@@ -10,7 +10,6 @@
 #include "vkr.hpp"
 #include "internal.hpp"
 
-#define vertex_attribute_desc_max 1
 #define max_objects 256
 
 namespace vkr {
@@ -798,38 +797,48 @@ namespace vkr {
 		color_blending.pAttachments = &color_blend_attachment;
 
 		handle->uniforms = new impl_UniformBuffer[uniform_count];
-		handle->descriptor_set_layouts = new VkDescriptorSetLayout[uniform_count];
+		auto layout_bindings = new VkDescriptorSetLayoutBinding[uniform_count];
+		for (usize i = 0; i < uniform_count; i++) {
+			bool dynamic = uniforms[i].rate == UniformBuffer::Rate::per_draw;
+			VkDescriptorSetLayoutBinding layout_binding{};
+			layout_bindings[i].binding = uniforms[i].binding;
+			layout_bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			layout_bindings[i].descriptorCount = 1;
+			layout_bindings[i].stageFlags = uniforms[i].stage == UniformBuffer::Stage::vertex ?
+				VK_SHADER_STAGE_VERTEX_BIT :
+				VK_SHADER_STAGE_FRAGMENT_BIT;
+			layout_bindings[i].pImmutableSamplers = null;
+		}
+
+		VkDescriptorSetLayoutCreateInfo layout_info{};
+		layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layout_info.bindingCount = uniform_count;
+		layout_info.pBindings = layout_bindings;
+
+		if (vkCreateDescriptorSetLayout(video->handle->device, &layout_info, null, &handle->descriptor_set_layout) != VK_SUCCESS) {
+			abort_with("Failed to create descriptor set layout.");
+		}
+
+		/* Create descriptor pool. */
+		VkDescriptorPoolSize pool_size{};
+		pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		pool_size.descriptorCount = max_frames_in_flight * uniform_count;
+
+		VkDescriptorPoolCreateInfo pool_info{};
+		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		pool_info.poolSizeCount = 1;
+		pool_info.pPoolSizes = &pool_size;
+		pool_info.maxSets = max_frames_in_flight * uniform_count;
+
+		if (vkCreateDescriptorPool(video->handle->device, &pool_info, null, &handle->descriptor_pool) != VK_SUCCESS) {
+			abort_with("Failed to create descriptor pool.");
+		}
+
 		for (usize i = 0; i < uniform_count; i++) {
 			handle->uniforms[i].ptr = uniforms[i].ptr;
 			handle->uniforms[i].size = uniforms[i].size;
 
-			bool dynamic = uniforms[i].rate == UniformBuffer::Rate::per_draw;
-
-			VkDeviceSize buffer_size = uniforms[i].size;
-			if (dynamic) {
-				buffer_size *= max_objects;
-			}
-
-			/* Create the descriptor layout. */
-			VkDescriptorSetLayoutBinding layout_binding{};
-			layout_binding.binding = uniforms[i].binding;
-			layout_binding.descriptorType = dynamic ?
-				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC :
-				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			layout_binding.descriptorCount = 1;
-			layout_binding.stageFlags = uniforms[i].stage == UniformBuffer::Stage::vertex ?
-				VK_SHADER_STAGE_VERTEX_BIT :
-				VK_SHADER_STAGE_FRAGMENT_BIT;
-			layout_binding.pImmutableSamplers = null;
-
-			VkDescriptorSetLayoutCreateInfo layout_info{};
-			layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-			layout_info.bindingCount = 1;
-			layout_info.pBindings = &layout_binding;
-
-			if (vkCreateDescriptorSetLayout(video->handle->device, &layout_info, null, handle->descriptor_set_layouts + i) != VK_SUCCESS) {
-				abort_with("Failed to create descriptor set layout.");
-			}
+			VkDeviceSize buffer_size = handle->uniforms[i].size;
 
 			/* Create uniform buffers. */
 			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
@@ -839,30 +848,15 @@ namespace vkr {
 					handle->uniforms[i].uniform_buffer_memories + ii);
 			}
 
-			/* Create descriptor pools. */
-			VkDescriptorPoolSize pool_size{};
-			pool_size.type = dynamic ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			pool_size.descriptorCount = max_frames_in_flight;
-
-			VkDescriptorPoolCreateInfo pool_info{};
-			pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-			pool_info.poolSizeCount = 1;
-			pool_info.pPoolSizes = &pool_size;
-			pool_info.maxSets = max_frames_in_flight;
-
-			if (vkCreateDescriptorPool(video->handle->device, &pool_info, null, &handle->uniforms[i].descriptor_pool) != VK_SUCCESS) {
-				abort_with("Failed to create descriptor pool.");
-			}
-
 			/* Create descriptor set. */
 			VkDescriptorSetLayout layouts[max_frames_in_flight];
 			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
-				layouts[ii] = handle->descriptor_set_layouts[i];
+				layouts[ii] = handle->descriptor_set_layout;
 			}
 
 			VkDescriptorSetAllocateInfo desc_set_alloc_info{};
 			desc_set_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-			desc_set_alloc_info.descriptorPool = handle->uniforms[i].descriptor_pool;
+			desc_set_alloc_info.descriptorPool = handle->descriptor_pool;
 			desc_set_alloc_info.descriptorSetCount = max_frames_in_flight;
 			desc_set_alloc_info.pSetLayouts = layouts;
 
@@ -879,9 +873,9 @@ namespace vkr {
 				VkWriteDescriptorSet desc_write{};
 				desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				desc_write.dstSet = handle->uniforms[i].descriptor_sets[ii];
-				desc_write.dstBinding = 0;
+				desc_write.dstBinding = uniforms[i].binding;
 				desc_write.dstArrayElement = 0;
-				desc_write.descriptorType = dynamic ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				desc_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 				desc_write.descriptorCount = 1;
 				desc_write.pBufferInfo = &buffer_info;
 
@@ -891,8 +885,8 @@ namespace vkr {
 
 		VkPipelineLayoutCreateInfo pipeline_layout_info{};
 		pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipeline_layout_info.setLayoutCount = uniform_count;
-		pipeline_layout_info.pSetLayouts = handle->descriptor_set_layouts;
+		pipeline_layout_info.setLayoutCount = 1;
+		pipeline_layout_info.pSetLayouts = &handle->descriptor_set_layout;
 
 		if (vkCreatePipelineLayout(video->handle->device, &pipeline_layout_info, null, &handle->pipeline_layout) != VK_SUCCESS) {
 			abort_with("Failed to create pipeline layout.");
@@ -927,12 +921,11 @@ namespace vkr {
 				vkDestroyBuffer(video->handle->device, handle->uniforms[i].uniform_buffers[ii], null);
 				vkFreeMemory(video->handle->device, handle->uniforms[i].uniform_buffer_memories[ii], null);
 			}
-
-			vkDestroyDescriptorPool(video->handle->device, handle->uniforms[i].descriptor_pool, null);
-			vkDestroyDescriptorSetLayout(video->handle->device, handle->descriptor_set_layouts[i], null);
 		}
 
-		delete[] handle->descriptor_set_layouts;
+		vkDestroyDescriptorPool(video->handle->device, handle->descriptor_pool, null);
+		vkDestroyDescriptorSetLayout(video->handle->device, handle->descriptor_set_layout, null);
+
 		delete[] handle->uniforms;
 
 		vkDestroyPipeline(video->handle->device, handle->pipeline, null);
@@ -968,15 +961,13 @@ namespace vkr {
 
 		/* TODO: pass a framebuffer into here? */
 
-		/* Update the per-frame uniform buffers. */
+		/* Update the uniform buffers. */
 		for (u32 i = 0; i < uniform_count; i++) {
-			if (handle->uniforms[i].rate == Pipeline::UniformBuffer::Rate::per_frame) {
-				void* uniform_data;
-				vkMapMemory(video->handle->device, handle->uniforms[i].uniform_buffer_memories[video->current_frame],
-					0, handle->uniforms[i].size, 0, &uniform_data);
-				memcpy(uniform_data, handle->uniforms[i].ptr, handle->uniforms[i].size);
-				vkUnmapMemory(video->handle->device, handle->uniforms[i].uniform_buffer_memories[video->current_frame]);
-			}
+			void* uniform_data;
+			vkMapMemory(video->handle->device, handle->uniforms[i].uniform_buffer_memories[video->current_frame],
+				0, handle->uniforms[i].size, 0, &uniform_data);
+			memcpy(uniform_data, handle->uniforms[i].ptr, handle->uniforms[i].size);
+			vkUnmapMemory(video->handle->device, handle->uniforms[i].uniform_buffer_memories[video->current_frame]);
 		}
 
 		VkRenderPassBeginInfo render_pass_info{};
@@ -1074,21 +1065,9 @@ namespace vkr {
 
 	void IndexBuffer::draw() {
 		for (usize i = 0; i < video->pipeline->uniform_count; i++) {
-			impl_UniformBuffer* uniform = video->pipeline->handle->uniforms + i;
-
-			if (uniform->rate == Pipeline::UniformBuffer::Rate::per_draw) {
-				usize offset = video->object_count * uniform->size;
-
-				void* uniform_data;
-				vkMapMemory(video->handle->device, uniform->uniform_buffer_memories[video->current_frame],
-					offset, uniform->size, 0, &uniform_data);
-				memcpy(uniform_data, uniform->ptr, uniform->size);
-				vkUnmapMemory(video->handle->device, uniform->uniform_buffer_memories[video->current_frame]);
-
-				vkCmdBindDescriptorSets(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
-					video->pipeline->handle->pipeline_layout, 0, 1,
-					&video->pipeline->handle->uniforms[i].descriptor_sets[video->current_frame], 1, (u32*)&offset);
-			}
+			vkCmdBindDescriptorSets(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
+				video->pipeline->handle->pipeline_layout, 0, 1,
+				&video->pipeline->handle->uniforms[i].descriptor_sets[video->current_frame], 0, null);
 		}
 
 		vkCmdBindIndexBuffer(video->handle->command_buffers[video->current_frame], handle->buffer, 0, VK_INDEX_TYPE_UINT16);

@@ -8,6 +8,10 @@ struct MatrixBuffer {
 	m4f transform;
 };
 
+struct ColorBuffer {
+	v3f color;
+};
+
 class SandboxApp : public vkr::App {
 private:
 	VertexBuffer* vb;
@@ -18,6 +22,7 @@ private:
 	Pipeline* pip;
 
 	MatrixBuffer matrices;
+	ColorBuffer colors;
 public:
 	SandboxApp() : App("Sandbox", vkr::v2i(800, 600)) {}
 
@@ -43,11 +48,18 @@ public:
 				.size    = sizeof(MatrixBuffer),
 				.rate    = Pipeline::UniformBuffer::Rate::per_draw,
 				.stage   = Pipeline::UniformBuffer::Stage::vertex
+			},
+			{
+				.binding = 1,
+				.ptr     = &colors,
+				.size    = sizeof(ColorBuffer),
+				.rate    = Pipeline::UniformBuffer::Rate::per_draw,
+				.stage   = Pipeline::UniformBuffer::Stage::fragment
 			}
 		};
 
 		pip = new Pipeline(video, shader, sizeof(Vertex),
-			attribs, 1, ubuffers, 1);
+			attribs, 1, ubuffers, 2);
 		pip->make_default();
 
 		Vertex verts[] = {
@@ -69,8 +81,10 @@ public:
 		pip->begin();
 			vb->bind();
 			matrices.transform = m4f::translate(m4f::identity(), v3f(-0.5f, -0.5f, 0.0f)),
+			colors.color = v3f(1.0f, 1.0, 1.0f);
 			ib->draw();
 			matrices.transform = m4f::translate(m4f::identity(), v3f(0.5f, 0.5f, 0.0f)),
+			colors.color = v3f(1.0f, 1.0, 0.0f);
 			ib->draw();
 		pip->end();
 	}

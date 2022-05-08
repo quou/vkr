@@ -49,8 +49,6 @@ namespace vkr {
 	};
 
 	struct impl_UniformBuffer {
-		VkDescriptorPool descriptor_pool;
-
 		VkBuffer uniform_buffers[max_frames_in_flight];
 		VkDeviceMemory uniform_buffer_memories[max_frames_in_flight];
 		VkDescriptorSet descriptor_sets[max_frames_in_flight];
@@ -65,7 +63,9 @@ namespace vkr {
 		VkPipelineLayout pipeline_layout;
 		VkPipeline pipeline;
 
-		VkDescriptorSetLayout* descriptor_set_layouts;
+		VkDescriptorPool descriptor_pool;
+
+		VkDescriptorSetLayout descriptor_set_layout;
 		impl_UniformBuffer* uniforms;
 	};
 
