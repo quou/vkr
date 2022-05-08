@@ -51,11 +51,8 @@ namespace vkr {
 	struct impl_UniformBuffer {
 		VkBuffer uniform_buffers[max_frames_in_flight];
 		VkDeviceMemory uniform_buffer_memories[max_frames_in_flight];
-		VkDescriptorSet descriptor_sets[max_frames_in_flight];
-
 		void* ptr;
 		usize size;
-		Pipeline::UniformBuffer::Rate rate;
 	};
 
 	struct impl_Pipeline {
@@ -67,6 +64,7 @@ namespace vkr {
 
 		VkDescriptorSetLayout descriptor_set_layout;
 		impl_UniformBuffer* uniforms;
+		VkDescriptorSet descriptor_sets[max_frames_in_flight];
 	};
 
 	struct impl_Shader {

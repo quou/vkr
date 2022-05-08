@@ -796,10 +796,10 @@ namespace vkr {
 		color_blending.attachmentCount = 1;
 		color_blending.pAttachments = &color_blend_attachment;
 
+		/* Set up uniform buffers and descriptor sets. */
 		handle->uniforms = new impl_UniformBuffer[uniform_count];
 		auto layout_bindings = new VkDescriptorSetLayoutBinding[uniform_count];
 		for (usize i = 0; i < uniform_count; i++) {
-			bool dynamic = uniforms[i].rate == UniformBuffer::Rate::per_draw;
 			VkDescriptorSetLayoutBinding layout_binding{};
 			layout_bindings[i].binding = uniforms[i].binding;
 			layout_bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -834,6 +834,22 @@ namespace vkr {
 			abort_with("Failed to create descriptor pool.");
 		}
 
+		/* Create descriptor set. */
+		VkDescriptorSetLayout layouts[max_frames_in_flight];
+		for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
+			layouts[ii] = handle->descriptor_set_layout;
+		}
+
+		VkDescriptorSetAllocateInfo desc_set_alloc_info{};
+		desc_set_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		desc_set_alloc_info.descriptorPool = handle->descriptor_pool;
+		desc_set_alloc_info.descriptorSetCount = max_frames_in_flight;
+		desc_set_alloc_info.pSetLayouts = layouts;
+
+		if (vkAllocateDescriptorSets(video->handle->device, &desc_set_alloc_info, handle->descriptor_sets) != VK_SUCCESS) {
+			abort_with("Failed to allocate descriptor sets.");
+		}
+
 		for (usize i = 0; i < uniform_count; i++) {
 			handle->uniforms[i].ptr = uniforms[i].ptr;
 			handle->uniforms[i].size = uniforms[i].size;
@@ -848,22 +864,6 @@ namespace vkr {
 					handle->uniforms[i].uniform_buffer_memories + ii);
 			}
 
-			/* Create descriptor set. */
-			VkDescriptorSetLayout layouts[max_frames_in_flight];
-			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
-				layouts[ii] = handle->descriptor_set_layout;
-			}
-
-			VkDescriptorSetAllocateInfo desc_set_alloc_info{};
-			desc_set_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-			desc_set_alloc_info.descriptorPool = handle->descriptor_pool;
-			desc_set_alloc_info.descriptorSetCount = max_frames_in_flight;
-			desc_set_alloc_info.pSetLayouts = layouts;
-
-			if (vkAllocateDescriptorSets(video->handle->device, &desc_set_alloc_info, handle->uniforms[i].descriptor_sets) != VK_SUCCESS) {
-				abort_with("Failed to allocate descriptor sets.");
-			}
-
 			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
 				VkDescriptorBufferInfo buffer_info{};
 				buffer_info.buffer = handle->uniforms[i].uniform_buffers[ii];
@@ -872,7 +872,7 @@ namespace vkr {
 
 				VkWriteDescriptorSet desc_write{};
 				desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				desc_write.dstSet = handle->uniforms[i].descriptor_sets[ii];
+				desc_write.dstSet = handle->descriptor_sets[ii];
 				desc_write.dstBinding = uniforms[i].binding;
 				desc_write.dstArrayElement = 0;
 				desc_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1067,7 +1067,7 @@ namespace vkr {
 		for (usize i = 0; i < video->pipeline->uniform_count; i++) {
 			vkCmdBindDescriptorSets(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
 				video->pipeline->handle->pipeline_layout, 0, 1,
-				&video->pipeline->handle->uniforms[i].descriptor_sets[video->current_frame], 0, null);
+				&video->pipeline->handle->descriptor_sets[video->current_frame], 0, null);
 		}
 
 		vkCmdBindIndexBuffer(video->handle->command_buffers[video->current_frame], handle->buffer, 0, VK_INDEX_TYPE_UINT16);

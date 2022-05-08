@@ -46,14 +46,12 @@ public:
 				.binding = 0,
 				.ptr     = &matrices,
 				.size    = sizeof(MatrixBuffer),
-				.rate    = Pipeline::UniformBuffer::Rate::per_draw,
 				.stage   = Pipeline::UniformBuffer::Stage::vertex
 			},
 			{
 				.binding = 1,
 				.ptr     = &colors,
 				.size    = sizeof(ColorBuffer),
-				.rate    = Pipeline::UniformBuffer::Rate::per_draw,
 				.stage   = Pipeline::UniformBuffer::Stage::fragment
 			}
 		};

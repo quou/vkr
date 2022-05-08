@@ -96,10 +96,6 @@ namespace vkr {
 			void* ptr;
 			usize size;
 
-			enum class Rate {
-				per_draw, per_frame
-			} rate;
-
 			enum class Stage {
 				vertex, fragment
 			} stage;
