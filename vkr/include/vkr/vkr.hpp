@@ -105,6 +105,7 @@ namespace vkr {
 
 		struct PushConstantRange {
 			usize size;
+			usize start;
 			Stage stage;
 		};
 
@@ -119,11 +120,11 @@ namespace vkr {
 		void begin();
 		void end();
 
-		void push_constant(Stage stage, const void* ptr, usize size);
+		void push_constant(Stage stage, const void* ptr, usize size, usize offset = 0);
 
 		template <typename T>
-		void push_constant(Stage stage, const T& c) {
-			push_constant(stage, &c, sizeof(T));
+		void push_constant(Stage stage, const T& c, usize offset = 0) {
+			push_constant(stage, &c, sizeof(T), offset);
 		}
 	};
 

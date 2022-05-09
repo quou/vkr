@@ -52,23 +52,23 @@ public:
 				.size    = sizeof(MatrixBuffer),
 				.stage   = Pipeline::Stage::vertex
 			},
-			{
-				.binding = 1,
-				.ptr     = &colors,
-				.size    = sizeof(ColorBuffer),
-				.stage   = Pipeline::Stage::fragment
-			}
 		};
 
 		Pipeline::PushConstantRange pcranges[] = {
 			{
 				.size = sizeof(m4f),
+				.start = 0,
 				.stage = Pipeline::Stage::vertex
+			},
+			{
+				.size = sizeof(v3f),
+				.start = 64,
+				.stage = Pipeline::Stage::fragment
 			}
 		};
 
 		pip = new Pipeline(video, shader, sizeof(Vertex),
-			attribs, 1, ubuffers, 2, pcranges, 1);
+			attribs, 1, ubuffers, 1, pcranges, 2);
 		pip->make_default();
 
 		Vertex verts[] = {
@@ -90,16 +90,21 @@ public:
 		colors.color = v3f(1.0f, 1.0, 0.0f);
 
 		m4f transform;
+		v3f color;
 
 		pip->begin();
 			vb->bind();
 
 			transform = m4f::translate(m4f::identity(), v3f(-0.5f, -0.5f, 0.0f));
+			color = v3f(1.0f, 1.0f, 0.0f);
 			pip->push_constant(Pipeline::Stage::vertex, transform);
+			pip->push_constant(Pipeline::Stage::fragment, color, 64);
 			ib->draw();
 
 			transform = m4f::translate(m4f::identity(), v3f(0.5f, 0.5f, 0.0f));
+			color = v3f(1.0f, 0.0f, 1.0f);
 			pip->push_constant(Pipeline::Stage::vertex, transform);
+			pip->push_constant(Pipeline::Stage::fragment, color, 64);
 			ib->draw();
 		pip->end();
 	}

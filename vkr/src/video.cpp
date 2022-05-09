@@ -894,7 +894,7 @@ namespace vkr {
 			pc_ranges[i].stageFlags = pcranges[i].stage ==Stage::vertex ?
 				VK_SHADER_STAGE_VERTEX_BIT :
 				VK_SHADER_STAGE_FRAGMENT_BIT;
-			pc_ranges[i].offset = 0;
+			pc_ranges[i].offset = pcranges[i].start;
 			pc_ranges[i].size = pcranges[i].size;
 		}
 
@@ -1009,18 +1009,17 @@ namespace vkr {
 		vkCmdEndRenderPass(video->handle->command_buffers[video->current_frame]);
 	}
 
-	void Pipeline::push_constant(Stage stage, const void* ptr, usize size) {
+	void Pipeline::push_constant(Stage stage, const void* ptr, usize size, usize offset) {
 #ifdef DEBUG
 		if (size > max_push_const_size) {
 			abort_with("Push constant too big. Use a uniform buffer instead.");
 		}
 #endif
-
 		vkCmdPushConstants(video->handle->command_buffers[video->current_frame], handle->pipeline_layout,
 		stage == Stage::vertex ?
 			VK_SHADER_STAGE_VERTEX_BIT :
 			VK_SHADER_STAGE_FRAGMENT_BIT,
-		0, size, ptr);
+		offset, size, ptr);
 	}
 
 	Buffer::Buffer(VideoContext* video) : video(video) {
