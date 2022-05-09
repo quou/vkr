@@ -134,13 +134,27 @@ namespace vkr {
 	m4f m4f::pers(f32 fov, f32 asp, f32 n, f32 f) {
 		m4f r(0.0f);
 
-		f32 thf = tanf(to_rad(fov) / 2.0f);
+		/*f32 thf = tanf(to_rad(fov) / 2.0f);
 
 		r.m[0][0] = (1.0f / (asp * thf));
 		r.m[1][1] = (1.0f / thf);
 		r.m[2][2] = -((f + n) / (f - n));
 		r.m[2][3] = -1.0f;
-		r.m[3][2] = -((2.0f * f * n) / (f - n));
+		r.m[3][2] = -((2.0f * f * n) / (f - n));*/
+
+		f32 fov_rad = to_rad(fov);
+		f32 focal_length = 1.0f / std::tan(fov_rad / 2.0f);
+
+		float x =  focal_length / asp;
+		float y = -focal_length;
+		float A = f / (n - f);
+		float B = n * A;
+
+		r.m[0][0] = x;
+		r.m[1][1] = y;
+		r.m[2][2] = A;
+		r.m[3][2] = B;
+		r.m[2][3] = -1.0f;
 
 		return r;
 	}

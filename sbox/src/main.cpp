@@ -22,6 +22,7 @@ private:
 	Model3D* monkey;
 
 	Shader* shader;
+	f32 rot = 0.0f;
 public:
 	SandboxApp() : App("Sandbox", vkr::v2i(800, 600)) {}
 
@@ -42,8 +43,10 @@ public:
 	void on_update(f64 ts) override {
 		renderer->begin();
 			renderer->draw(monkey, m4f::translate(m4f::identity(), v3f(-2.5f, 0.0f, 0.0f)));
-			renderer->draw(monkey, m4f::translate(m4f::identity(), v3f( 1.5f, 0.0f, 0.0f)));
+			renderer->draw(monkey, m4f::rotate(m4f::identity(), rot, v3f(0.0f, 1.0f, 0.0f)));
 		renderer->end();
+
+		rot += 0.0001f;
 	}
 
 	void on_deinit() override {

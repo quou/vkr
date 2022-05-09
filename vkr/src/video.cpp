@@ -885,7 +885,7 @@ namespace vkr {
 		rasteriser.polygonMode = VK_POLYGON_MODE_FILL;
 		rasteriser.lineWidth = 1.0f;
 		rasteriser.cullMode = VK_CULL_MODE_BACK_BIT;
-		rasteriser.frontFace = VK_FRONT_FACE_CLOCKWISE;
+		rasteriser.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 		rasteriser.depthBiasEnable = VK_FALSE;
 
 		VkPipelineMultisampleStateCreateInfo multisampling{};

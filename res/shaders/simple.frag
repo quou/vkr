@@ -21,7 +21,7 @@ void main() {
 
 	const float shininess = 32.0;
 
-	vec3 view_dir = normalize(fs_in.world_pos - data.camera_pos);
+	vec3 view_dir = normalize(data.camera_pos - fs_in.world_pos);
 
 	vec3 light_dir = normalize(light_pos - fs_in.world_pos);
 	vec3 reflect_dir = reflect(-light_dir, normal);
