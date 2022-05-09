@@ -99,7 +99,11 @@ namespace vkr {
 			Stage stage;
 		};
 
-		Pipeline(VideoContext* video, Shader* shader, usize stride,
+		enum class Flags {
+			depth_test = 1 << 0
+		};
+
+		Pipeline(VideoContext* video, Flags flags, Shader* shader, usize stride,
 			Attribute* attribs, usize attrib_count,
 			UniformBuffer* uniforms = null, usize uniform_count = 0,
 			PushConstantRange* pcranges = null, usize pcrange_count = 0);

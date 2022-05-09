@@ -4,7 +4,7 @@
 
 #include "vkr.hpp"
 
-#define max_frames_in_flight 2
+#define max_frames_in_flight 3
 
 namespace vkr {
 	struct impl_VideoContext {
@@ -29,6 +29,11 @@ namespace vkr {
 
 		/* Framebuffers */
 		VkFramebuffer* swapchain_framebuffers;
+
+		/* Depth buffer. */
+		VkImage depth_image;
+		VkDeviceMemory depth_memory;
+		VkImageView depth_image_view;
 
 		/* Command buffer */
 		VkCommandPool command_pool;

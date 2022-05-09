@@ -35,13 +35,15 @@ public:
 		monkey = Model3D::from_wavefront(video, monkey_obj);
 
 		renderer = new Renderer3D(this, video, shader);
-		renderer->drawlist.push_back(Renderer3D::DrawlistEntry { monkey, m4f::identity() });
 
 		delete monkey_obj;
 	}
 
 	void on_update(f64 ts) override {
-		renderer->draw();
+		renderer->begin();
+			renderer->draw(monkey, m4f::translate(m4f::identity(), v3f(-2.5f, 0.0f, 0.0f)));
+			renderer->draw(monkey, m4f::translate(m4f::identity(), v3f( 1.5f, 0.0f, 0.0f)));
+		renderer->end();
 	}
 
 	void on_deinit() override {

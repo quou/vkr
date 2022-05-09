@@ -17,6 +17,10 @@ namespace vkr {
 		} v_ub;
 
 		struct {
+			v3f camera_pos;
+		} f_ub;
+
+		struct {
 			m4f transform;
 		} v_pc;
 
@@ -26,17 +30,14 @@ namespace vkr {
 		Renderer3D(App* app, VideoContext* video, Shader* shader);
 		~Renderer3D();
 
-		void draw();
-
-		struct DrawlistEntry {
-			Model3D* model;
-			m4f transform;
-		};
-
-		std::vector<DrawlistEntry> drawlist;
+		void begin();
+		void end();
+		void draw(Model3D* model, m4f transform);
 
 		struct Vertex {
 			v3f position;
+			v2f uv;
+			v3f normal;
 		};
 	};
 

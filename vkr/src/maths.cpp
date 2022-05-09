@@ -132,18 +132,15 @@ namespace vkr {
 	}
 
 	m4f m4f::pers(f32 fov, f32 asp, f32 n, f32 f) {
-		m4f r(1.0f);
+		m4f r(0.0f);
 
-		const f32 q = 1.0f / tanf(to_rad(fov) / 2.0f);
-		const f32 a = q / asp;
-		const f32 b = (n + f) / (n - f);
-		const f32 c = (2.0f * n * f) / (n - f);
+		f32 thf = tanf(to_rad(fov) / 2.0f);
 
-		r.m[0][0] = a;
-		r.m[1][1] = -q;
-		r.m[2][2] = b;
+		r.m[0][0] = (1.0f / (asp * thf));
+		r.m[1][1] = (1.0f / thf);
+		r.m[2][2] = -((f + n) / (f - n));
 		r.m[2][3] = -1.0f;
-		r.m[3][2] = c;
+		r.m[3][2] = -((2.0f * f * n) / (f - n));
 
 		return r;
 	}

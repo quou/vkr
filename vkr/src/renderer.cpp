@@ -6,11 +6,21 @@ namespace vkr {
 		app(app) {
 
 		Pipeline::Attribute attribs[] = {
-			{
+			{ /* vec3 position. */
 				.location = 0,
-				.offset = offsetof(Vertex, position),
-				.type = Pipeline::Attribute::Type::float3
-			}
+				.offset   = offsetof(Vertex, position),
+				.type     = Pipeline::Attribute::Type::float3
+			},
+			{ /* vec2 UV. */
+				.location = 1,
+				.offset   = offsetof(Vertex, uv),
+				.type     = Pipeline::Attribute::Type::float2
+			},
+			{ /* vec3 normal. */
+				.location = 2,
+				.offset   = offsetof(Vertex, normal),
+				.type     = Pipeline::Attribute::Type::float3
+			},
 		};
 
 		Pipeline::UniformBuffer ubuffers[] = {
@@ -19,6 +29,12 @@ namespace vkr {
 				.ptr     = &v_ub,
 				.size    = sizeof(v_ub),
 				.stage   = Pipeline::Stage::vertex
+			},
+			{
+				.binding = 1,
+				.ptr     = &f_ub,
+				.size    = sizeof(f_ub),
+				.stage   = Pipeline::Stage::fragment
 			}
 		};
 
@@ -30,9 +46,12 @@ namespace vkr {
 			}
 		};
 
-		pipeline = new Pipeline(video, shader, sizeof(Vertex),
-			attribs, 1,
-			ubuffers, 1,
+		pipeline = new Pipeline(video,
+			Pipeline::Flags::depth_test,
+			shader,
+			sizeof(Vertex),
+			attribs, 3,
+			ubuffers, 2,
 			pc, 1);
 
 		/* TODO: Make this better. */
@@ -43,23 +62,30 @@ namespace vkr {
 		delete pipeline;
 	}
 
-	void Renderer3D::draw() {
+	void Renderer3D::begin() {
 		auto size = app->get_size();
 
+		v3f camera_pos(0.0f, 0.0f, -5.0f);
+
 		v_ub.projection = m4f::pers(70.0f, (f32)size.x / (f32)size.y, 0.1f, 100.0f);
-		v_ub.view = m4f::translate(m4f::identity(), v3f(0.0f, 0.0f, -5.0f));
+		v_ub.view = m4f::translate(m4f::identity(), camera_pos);
+
+		f_ub.camera_pos = camera_pos;
 
 		pipeline->begin();
-		for (auto& entry : drawlist) {
-			auto model = entry.model;
-			v_pc.transform = entry.transform;
-			for (auto mesh : model->meshes) {
-				pipeline->push_constant(Pipeline::Stage::vertex, &v_pc);
-				mesh->vb->bind();
-				mesh->ib->draw();
-			}
-		}
+	}
+
+	void Renderer3D::end() {
 		pipeline->end();
+	}
+
+	void Renderer3D::draw(Model3D* model, m4f transform) {
+		v_pc.transform = transform;
+		for (auto mesh : model->meshes) {
+			pipeline->push_constant(Pipeline::Stage::vertex, v_pc);
+			mesh->vb->bind();
+			mesh->ib->draw();
+		}
 	}
 
 	Mesh3D* Mesh3D::from_wavefront(VideoContext* video, WavefrontModel* wmodel, WavefrontModel::Mesh* wmesh) {
@@ -71,11 +97,16 @@ namespace vkr {
 
 		for (auto vertex : wmesh->vertices) {
 			auto pos = wmodel->positions[vertex.position];
+			auto normal = wmodel->normals[vertex.normal];
+			auto uv = wmodel->uvs[vertex.uv];
 
 			bool is_new = true;
 
 			for (usize i = 0; i < vert_count; i++) {
-				if (pos == verts[i].position) {
+				if (
+					pos    == verts[i].position &&
+					normal == verts[i].normal &&
+					uv     == verts[i].uv) {
 					indices[index_count++] = i;
 					is_new = false;
 				}
@@ -83,6 +114,8 @@ namespace vkr {
 
 			if (is_new) {
 				verts[vert_count].position = pos;
+				verts[vert_count].normal = normal;
+				verts[vert_count].uv = uv;
 				indices[index_count++] = vert_count;
 				vert_count++;
 			}
