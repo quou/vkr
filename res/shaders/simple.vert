@@ -19,8 +19,8 @@ layout (location = 0) out VertexOut {
 } vs_out;
 
 void main() {
-	vs_out.normal = normal;
+	vs_out.normal = mat3(push_data.transform) * normal;
 	vs_out.world_pos = vec3(push_data.transform * vec4(position, 1.0));
 
-	gl_Position = data.projection * data.view * vec4(vs_out.world_pos, 1.0);
+	gl_Position = data.projection * data.view * push_data.transform * vec4(position, 1.0);
 }

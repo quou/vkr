@@ -19,12 +19,12 @@ void main() {
 	const float light_range = 10.0;
 	const float light_intensity = 1.0;
 
-	const float shininess = 32.0;
+	const float shininess = 200.0;
 
 	vec3 view_dir = normalize(data.camera_pos - fs_in.world_pos);
 
 	vec3 light_dir = normalize(light_pos - fs_in.world_pos);
-	vec3 reflect_dir = reflect(-light_dir, normal);
+	vec3 reflect_dir = reflect(normal, -light_dir);
 
 	float attenuation = 1.0 / (pow(length(light_pos - fs_in.world_pos), 2.0) + 1);
 
