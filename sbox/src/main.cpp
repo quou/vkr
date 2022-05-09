@@ -46,7 +46,7 @@ public:
 			renderer->draw(monkey, m4f::rotate(m4f::identity(), rot, v3f(0.0f, 1.0f, 0.0f)));
 		renderer->end();
 
-		rot += 0.0001f;
+		rot += 1.0f * (f32)ts;
 	}
 
 	void on_deinit() override {

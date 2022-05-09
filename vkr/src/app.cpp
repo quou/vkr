@@ -38,12 +38,19 @@ namespace vkr {
 
 		on_init();
 
+		f64 now = glfwGetTime(), last = now;
+		f64 ts = 0.0;
+
 		while (!glfwWindowShouldClose(handle->window)) {
 			glfwPollEvents();
 
 			video->begin();
-			on_update(1.0);
+			on_update(ts);
 			video->end();
+
+			now = glfwGetTime();
+			ts = now - last;
+			last = now;
 		}
 
 		on_deinit();
