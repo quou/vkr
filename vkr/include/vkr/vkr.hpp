@@ -5,6 +5,8 @@
 
 #include "common.hpp"
 #include "maths.hpp"
+#include "renderer.hpp"
+#include "wavefront.hpp"
 
 namespace vkr {
 	/* Basic logging. */
@@ -30,18 +32,6 @@ namespace vkr {
 	struct impl_Pipeline;
 	struct impl_VideoContext;
 	struct impl_Shader;
-
-	/* Class forward declarations. */
-	class App;
-	class Buffer;
-	class IndexBuffer;
-	class Pipeline3D;
-	class Pipeline;
-	class Shader;
-	class Shader;
-	class UniformBuffer;
-	class VertexBuffer;
-	class VideoContext;
 
 	/* To be inherited by client applications to provide custom
 	 * functionality and data. */

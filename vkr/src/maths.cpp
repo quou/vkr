@@ -140,7 +140,7 @@ namespace vkr {
 		const f32 c = (2.0f * n * f) / (n - f);
 
 		r.m[0][0] = a;
-		r.m[1][1] = q;
+		r.m[1][1] = -q;
 		r.m[2][2] = b;
 		r.m[2][3] = -1.0f;
 		r.m[3][2] = c;

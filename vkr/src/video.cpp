@@ -936,6 +936,8 @@ namespace vkr {
 	}
 
 	Pipeline::~Pipeline() {
+		video->wait_for_done();
+
 		for (u32 i = 0; i < uniform_count; i++) {
 			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
 				vkDestroyBuffer(video->handle->device, handle->uniforms[i].uniform_buffers[ii], null);
@@ -951,6 +953,8 @@ namespace vkr {
 		vkDestroyPipeline(video->handle->device, handle->pipeline, null);
 		vkDestroyPipelineLayout(video->handle->device, handle->pipeline_layout, null);
 		vkDestroyRenderPass(video->handle->device, handle->render_pass, null);
+	
+		delete handle;
 	}
 
 	void Pipeline::make_default() {

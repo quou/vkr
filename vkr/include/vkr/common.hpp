@@ -35,4 +35,16 @@ namespace vkr {
 
 	typedef float f32;
 	typedef double f64;
+
+	/* Class forward declarations. */
+	class App;
+	class Buffer;
+	class IndexBuffer;
+	class Pipeline3D;
+	class Pipeline;
+	class Shader;
+	class Shader;
+	class UniformBuffer;
+	class VertexBuffer;
+	class VideoContext;
 }
