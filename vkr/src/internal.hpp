@@ -1,6 +1,7 @@
 #include <vector>
 
 #include <vulkan/vulkan.h>
+#include <vk_mem_alloc.h>
 
 #include "vkr.hpp"
 
@@ -11,6 +12,8 @@ namespace vkr {
 		VkInstance instance;
 		VkPhysicalDevice pdevice;
 		VkDevice device;
+
+		VmaAllocator allocator;
 
 		VkQueue graphics_queue;
 		VkQueue present_queue;
@@ -32,7 +35,7 @@ namespace vkr {
 
 		/* Depth buffer. */
 		VkImage depth_image;
-		VkDeviceMemory depth_memory;
+		VmaAllocation depth_memory;
 		VkImageView depth_image_view;
 
 		/* Command buffer */
@@ -48,14 +51,12 @@ namespace vkr {
 	struct impl_Buffer {
 		VkBuffer buffer;
 
-		/* TODO: Make a proper allocator so that there
-		 * isn't a different allocation for each buffer. */
-		VkDeviceMemory memory;
+		VmaAllocation memory;
 	};
 
 	struct impl_UniformBuffer {
 		VkBuffer uniform_buffers[max_frames_in_flight];
-		VkDeviceMemory uniform_buffer_memories[max_frames_in_flight];
+		VmaAllocation uniform_buffer_memories[max_frames_in_flight];
 		void* ptr;
 		usize size;
 	};

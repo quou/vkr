@@ -323,26 +323,11 @@ namespace vkr {
 		vkQueueWaitIdle(handle->graphics_queue);
 
 		vkFreeCommandBuffers(handle->device, handle->command_pool, 1, &command_buffer);
-	}
-
-	static u32 find_memory_type(impl_VideoContext* handle, u32 filter, VkMemoryPropertyFlags flags) {
-		VkPhysicalDeviceMemoryProperties mem_props;
-		vkGetPhysicalDeviceMemoryProperties(handle->pdevice, &mem_props);
-
-		for (u32 i = 0; i < mem_props.memoryTypeCount; i++) {
-			if ((filter & (1 << i)) && (mem_props.memoryTypes[i].propertyFlags & flags) == flags) {
-				return i;
-			}
-		}
-
-		abort_with("Failed to find a suitable type of memory.");
-
-		return 0;
-	}
+	}	
 
 	static void new_image(impl_VideoContext* handle, v2i size, VkFormat format,
 		VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags props,
-		VkImage* image, VkDeviceMemory* image_memory) {
+		VkImage* image, VmaAllocation* image_memory) {
 
 		VkImageCreateInfo create_info{};
 		create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -359,23 +344,13 @@ namespace vkr {
 		create_info.samples = VK_SAMPLE_COUNT_1_BIT;
 		create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-		if (vkCreateImage(handle->device, &create_info, null, image) != VK_SUCCESS) {
+		VmaAllocationCreateInfo alloc_info{};
+		alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
+		alloc_info.requiredFlags = props;
+
+		if (vmaCreateImage(handle->allocator, &create_info, &alloc_info, image, image_memory, null) != VK_SUCCESS) {
 			abort_with("Failed to create image.");
 		}
-
-		VkMemoryRequirements mem_req;
-		vkGetImageMemoryRequirements(handle->device, *image, &mem_req);
-
-		VkMemoryAllocateInfo alloc_info{};
-		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc_info.allocationSize = mem_req.size;
-		alloc_info.memoryTypeIndex = find_memory_type(handle, mem_req.memoryTypeBits, props);
-	
-		if (vkAllocateMemory(handle->device, &alloc_info, null, image_memory) != VK_SUCCESS) {
-			abort_with("Failed to allocate memory.");
-		}
-
-		vkBindImageMemory(handle->device, *image, *image_memory, 0);
 	}
 
 	static VkImageView new_image_view(impl_VideoContext* handle, VkImage image, VkFormat format, VkImageAspectFlags flags) {
@@ -442,7 +417,7 @@ namespace vkr {
 	}
 
 	static void new_buffer(impl_VideoContext* handle, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags props,
-		VkBuffer* buffer, VkDeviceMemory* buffer_memory) {
+		VmaAllocationCreateFlags flags, VkBuffer* buffer, VmaAllocation* buffer_memory) {
 
 		VkBufferCreateInfo buffer_info{};
 		buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -450,23 +425,18 @@ namespace vkr {
 		buffer_info.usage = usage;
 		buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-		if (vkCreateBuffer(handle->device, &buffer_info, null, buffer) != VK_SUCCESS) {
+		if (flags & VMA_ALLOCATION_CREATE_MAPPED_BIT) {
+			flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+		}
+
+		VmaAllocationCreateInfo alloc_info{};
+		alloc_info.flags = flags;
+		alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
+		alloc_info.requiredFlags = props;
+
+		if (vmaCreateBuffer(handle->allocator, &buffer_info, &alloc_info, buffer, buffer_memory, null) != VK_SUCCESS) {
 			abort_with("Failed to create buffer.");
 		}
-
-		VkMemoryRequirements mem_req;
-		vkGetBufferMemoryRequirements(handle->device, *buffer, &mem_req);
-
-		VkMemoryAllocateInfo alloc_info{};
-		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc_info.allocationSize = mem_req.size;
-		alloc_info.memoryTypeIndex = find_memory_type(handle, mem_req.memoryTypeBits, props);
-
-		if (vkAllocateMemory(handle->device, &alloc_info, null, buffer_memory) != VK_SUCCESS) {
-			abort_with("Failed to allocate memory for a buffer.");
-		}
-
-		vkBindBufferMemory(handle->device, *buffer, *buffer_memory, 0);
 	}
 
 	VideoContext::VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions) : current_frame(0) {
@@ -557,6 +527,20 @@ namespace vkr {
 		vkGetDeviceQueue(handle->device, qfs.present.value(), 0, &handle->present_queue);
 
 		delete[] devices;
+
+		/* Create the allocator */
+		VmaVulkanFunctions vk_functions{};
+		vk_functions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
+		vk_functions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
+
+		VmaAllocatorCreateInfo allocator_info{};
+		allocator_info.vulkanApiVersion = VK_API_VERSION_1_0;
+		allocator_info.physicalDevice = handle->pdevice;
+		allocator_info.device = handle->device;
+		allocator_info.instance = handle->instance;
+		allocator_info.pVulkanFunctions = &vk_functions;
+
+		vmaCreateAllocator(&allocator_info, &handle->allocator);
 
 		/* Create the swap chain. */
 		SwapChainCapabilities scc = get_swap_chain_capabilities(handle, handle->pdevice);
@@ -679,11 +663,12 @@ namespace vkr {
 			vkDestroyImageView(handle->device, handle->swapchain_image_views[i], null);
 		}
 
-		vkFreeMemory(handle->device, handle->depth_memory, null);
 		vkDestroyImageView(handle->device, handle->depth_image_view, null);
-		vkDestroyImage(handle->device, handle->depth_image, null);
+		vmaDestroyImage(handle->allocator, handle->depth_image, handle->depth_memory);
 
 		vkDestroySwapchainKHR(handle->device, handle->swapchain, null);
+
+		vmaDestroyAllocator(handle->allocator);
 
 		vkDestroyDevice(handle->device, null);
 		vkDestroySurfaceKHR(handle->instance, handle->surface, null);
@@ -980,6 +965,7 @@ namespace vkr {
 			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
 				new_buffer(video->handle, buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+					VMA_ALLOCATION_CREATE_MAPPED_BIT,
 					handle->uniforms[i].uniform_buffers + ii,
 					handle->uniforms[i].uniform_buffer_memories + ii);
 			}
@@ -1055,8 +1041,9 @@ namespace vkr {
 
 		for (u32 i = 0; i < uniform_count; i++) {
 			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
-				vkDestroyBuffer(video->handle->device, handle->uniforms[i].uniform_buffers[ii], null);
-				vkFreeMemory(video->handle->device, handle->uniforms[i].uniform_buffer_memories[ii], null);
+				vmaDestroyBuffer(video->handle->allocator,
+						handle->uniforms[i].uniform_buffers[ii],
+						handle->uniforms[i].uniform_buffer_memories[ii]);
 			}
 		}
 
@@ -1107,10 +1094,10 @@ namespace vkr {
 		/* Update the uniform buffers. */
 		for (u32 i = 0; i < uniform_count; i++) {
 			void* uniform_data;
-			vkMapMemory(video->handle->device, handle->uniforms[i].uniform_buffer_memories[video->current_frame],
-				0, handle->uniforms[i].size, 0, &uniform_data);
+			vmaMapMemory(video->handle->allocator, handle->uniforms[i].uniform_buffer_memories[video->current_frame],
+				&uniform_data);
 			memcpy(uniform_data, handle->uniforms[i].ptr, handle->uniforms[i].size);
-			vkUnmapMemory(video->handle->device, handle->uniforms[i].uniform_buffer_memories[video->current_frame]);
+			vmaUnmapMemory(video->handle->allocator, handle->uniforms[i].uniform_buffer_memories[video->current_frame]);
 		}
 
 		VkRenderPassBeginInfo render_pass_info{};
@@ -1157,30 +1144,29 @@ namespace vkr {
 
 	VertexBuffer::VertexBuffer(VideoContext* video, void* verts, usize size) : Buffer(video) {
 		VkBuffer stage_buffer;
-		VkDeviceMemory stage_buffer_memory;
+		VmaAllocation stage_buffer_memory;
 
 		new_buffer(video->handle, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			VMA_ALLOCATION_CREATE_MAPPED_BIT,
 			&stage_buffer, &stage_buffer_memory);
 
 		void* data;
-		vkMapMemory(video->handle->device, stage_buffer_memory, 0, size, 0, &data);
+		vmaMapMemory(video->handle->allocator, stage_buffer_memory, &data);
 		memcpy(data, verts, size);
-		vkUnmapMemory(video->handle->device, stage_buffer_memory);
+		vmaUnmapMemory(video->handle->allocator, stage_buffer_memory);
 
 		new_buffer(video->handle, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &handle->buffer, &handle->memory);
+			0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &handle->buffer, &handle->memory);
 		copy_buffer(video->handle, handle->buffer, stage_buffer, size);
 
-		vkDestroyBuffer(video->handle->device, stage_buffer, null);
-		vkFreeMemory(video->handle->device, stage_buffer_memory, null);
+		vmaDestroyBuffer(video->handle->allocator, stage_buffer, stage_buffer_memory);
 	}
 
 	VertexBuffer::~VertexBuffer() {
 		video->wait_for_done();
 
-		vkDestroyBuffer(video->handle->device, handle->buffer, null);
-		vkFreeMemory(video->handle->device, handle->memory, null);
+		vmaDestroyBuffer(video->handle->allocator, handle->buffer, handle->memory);
 	}
 
 	void VertexBuffer::bind() {
@@ -1193,30 +1179,29 @@ namespace vkr {
 		usize size = sizeof(u16) * count;
 
 		VkBuffer stage_buffer;
-		VkDeviceMemory stage_buffer_memory;
+		VmaAllocation stage_buffer_memory;
 
 		new_buffer(video->handle, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			VMA_ALLOCATION_CREATE_MAPPED_BIT,
 			&stage_buffer, &stage_buffer_memory);
 
 		void* data;
-		vkMapMemory(video->handle->device, stage_buffer_memory, 0, size, 0, &data);
+		vmaMapMemory(video->handle->allocator, stage_buffer_memory, &data);
 		memcpy(data, indices, size);
-		vkUnmapMemory(video->handle->device, stage_buffer_memory);
+		vmaUnmapMemory(video->handle->allocator, stage_buffer_memory);
 
 		new_buffer(video->handle, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &handle->buffer, &handle->memory);
+			0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &handle->buffer, &handle->memory);
 		copy_buffer(video->handle, handle->buffer, stage_buffer, size);
 
-		vkDestroyBuffer(video->handle->device, stage_buffer, null);
-		vkFreeMemory(video->handle->device, stage_buffer_memory, null);
+		vmaDestroyBuffer(video->handle->allocator, stage_buffer, stage_buffer_memory);
 	}
 
 	IndexBuffer::~IndexBuffer() {
 		video->wait_for_done();
 
-		vkDestroyBuffer(video->handle->device, handle->buffer, null);
-		vkFreeMemory(video->handle->device, handle->memory, null);
+		vmaDestroyBuffer(video->handle->allocator, handle->buffer, handle->memory);
 	}
 
 	void IndexBuffer::draw() {

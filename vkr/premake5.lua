@@ -1,3 +1,4 @@
+include "ext/vma"
 include "ext/glfw"
 
 project "vkr"
@@ -23,6 +24,7 @@ project "vkr"
 
 	includedirs {
 		"include/vkr",
+		"ext/vma/include",
 		"ext/glfw/include"
 	}
 
@@ -32,7 +34,8 @@ project "vkr"
 	}
 
 	links {
-		"glfw"
+		"glfw",
+		"vma"
 	}
 
 	filter "system:linux"
