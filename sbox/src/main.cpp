@@ -30,8 +30,8 @@ public:
 
 	void on_init() override {
 		shader = Shader::from_file(video,
-			"res/shaders/simple.vert.spv",
-			"res/shaders/simple.frag.spv");
+			"res/shaders/lit.vert.spv",
+			"res/shaders/lit.frag.spv");
 
 		auto monkey_obj = WavefrontModel::from_file("res/models/monkey.obj");
 

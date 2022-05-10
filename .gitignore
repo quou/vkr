@@ -50,3 +50,4 @@ tags
 
 # SPIR-V output
 *.spv
+res/shaders

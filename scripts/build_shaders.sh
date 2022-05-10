@@ -1,2 +1,6 @@
-glslc res/shaders/simple.vert -o res/shaders/simple.vert.spv
-glslc res/shaders/simple.frag -o res/shaders/simple.frag.spv
+#!/bin/bash
+
+mkdir -p shaders/obj
+mkdir -p res/shaders
+
+./shaders/compiler.lua shaders/src/lit.glsl shaders/obj/ res/shaders/

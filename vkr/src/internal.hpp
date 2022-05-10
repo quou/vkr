@@ -6,6 +6,7 @@
 #include "vkr.hpp"
 
 #define max_frames_in_flight 3
+#define max_bound_textures 256
 
 namespace vkr {
 	struct impl_VideoContext {

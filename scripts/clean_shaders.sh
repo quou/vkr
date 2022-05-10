@@ -1,2 +1,4 @@
-rm res/shaders/simple.vert.spv
-rm res/shaders/simple.frag.spv
+#!/bin/bash
+
+rm -rf shaders/obj
+rm -rf shaders/shaders
