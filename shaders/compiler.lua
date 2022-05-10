@@ -5,6 +5,11 @@
 --
 -- Usage:
 -- 	compiler.lua file intdir outdir
+--
+-- intdir is where the intermediate .vert and .frag files are
+-- created.
+--
+-- outdir is where the final .spv files are created.
 
 local line_number = 1
 local vertex = ""
