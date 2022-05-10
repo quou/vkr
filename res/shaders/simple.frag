@@ -18,7 +18,7 @@ void main() {
 	vec3 normal = normalize(fs_in.normal);
 
 	const vec3 light_pos = vec3(0.0, 0.0, 5.0);
-	const vec3 light_color = vec3(1.0, 0.0, 0.0);
+	const vec3 light_color = vec3(1.0, 1.0, 1.0);
 	const float light_range = 10.0;
 	const float light_intensity = 1.0;
 
