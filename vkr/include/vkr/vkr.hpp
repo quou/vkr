@@ -30,8 +30,9 @@ namespace vkr {
 	struct impl_App;
 	struct impl_Buffer;
 	struct impl_Pipeline;
-	struct impl_VideoContext;
 	struct impl_Shader;
+	struct impl_Texture;
+	struct impl_VideoContext;
 
 	/* To be inherited by client applications to provide custom
 	 * functionality and data. */
@@ -75,7 +76,7 @@ namespace vkr {
 		enum class Stage {
 			vertex, fragment
 		};
-	
+
 		struct Attribute {
 			u32 location;
 			usize offset;
@@ -85,8 +86,12 @@ namespace vkr {
 			} type;
 		};
 
+		/* If `is_sampler' is set to true, `ptr' must be
+		 * a valid pointer to a `Texture'. */
 		struct UniformBuffer {
+			const char* name;
 			u32 binding;
+			bool is_sampler;
 			void* ptr;
 			usize size;
 
@@ -149,6 +154,25 @@ namespace vkr {
 		void draw();
 	};
 
+	class VKR_API Texture {
+	private:
+		VideoContext* video;
+		impl_Texture* handle;
+
+		v2i size;
+		u32 component_count;
+
+		friend class Pipeline;
+	public:
+		Texture(VideoContext* video, void* data, v2i size, u32 component_count);
+		~Texture();
+
+		static Texture* from_file(VideoContext* video, const char* file_path);
+
+		inline v2i get_size() const { return size; }
+		inline u32 get_component_count() const { return component_count; }
+	};
+
 	class VKR_API VideoContext {
 	private:
 		bool validation_layers_supported();
@@ -178,7 +202,7 @@ namespace vkr {
 		void end();
 	};
 
-	class Shader {
+	class VKR_API Shader {
 	private:
 		impl_Shader* handle;
 		VideoContext* video;

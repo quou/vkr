@@ -54,6 +54,14 @@ namespace vkr {
 		VmaAllocation memory;
 	};
 
+	struct impl_Texture {
+		VkImage image;
+		VkImageView view;
+		VkSampler sampler;
+
+		VmaAllocation memory;
+	};
+
 	struct impl_UniformBuffer {
 		VkBuffer uniform_buffers[max_frames_in_flight];
 		VmaAllocation uniform_buffer_memories[max_frames_in_flight];

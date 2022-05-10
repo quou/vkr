@@ -6,7 +6,7 @@
 #include "maths.hpp"
 
 namespace vkr {
-	struct WavefrontModel {
+	struct VKR_API WavefrontModel {
 		struct Vertex {
 			usize position, uv, normal;
 		};

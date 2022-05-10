@@ -2,7 +2,7 @@
 #include "vkr.hpp"
 
 namespace vkr {
-	Renderer3D::Renderer3D(App* app, VideoContext* video, Shader* shader) :
+	Renderer3D::Renderer3D(App* app, VideoContext* video, Shader* shader, Texture* texture) :
 		app(app) {
 
 		Pipeline::Attribute attribs[] = {
@@ -26,15 +26,24 @@ namespace vkr {
 		Pipeline::UniformBuffer ubuffers[] = {
 			{
 				.binding = 0,
+				.is_sampler = false,
 				.ptr     = &v_ub,
 				.size    = sizeof(v_ub),
 				.stage   = Pipeline::Stage::vertex
 			},
 			{
 				.binding = 1,
+				.is_sampler = false,
 				.ptr     = &f_ub,
 				.size    = sizeof(f_ub),
 				.stage   = Pipeline::Stage::fragment
+			},
+			{
+				.binding = 2,
+				.is_sampler = true,
+				.ptr = texture,
+				.size = 0,
+				.stage = Pipeline::Stage::fragment
 			}
 		};
 
@@ -51,7 +60,7 @@ namespace vkr {
 			shader,
 			sizeof(Vertex),
 			attribs, 3,
-			ubuffers, 2,
+			ubuffers, 3,
 			pc, 1);
 
 		/* TODO: Make this better. */

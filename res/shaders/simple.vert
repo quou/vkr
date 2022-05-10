@@ -16,11 +16,13 @@ layout (push_constant) uniform PushData {
 layout (location = 0) out VertexOut {
 	vec3 normal;
 	vec3 world_pos;
+	vec2 uv;
 } vs_out;
 
 void main() {
 	vs_out.normal = mat3(push_data.transform) * normal;
 	vs_out.world_pos = vec3(push_data.transform * vec4(position, 1.0));
+	vs_out.uv = uv;
 
 	gl_Position = data.projection * data.view * push_data.transform * vec4(position, 1.0);
 }

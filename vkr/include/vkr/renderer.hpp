@@ -10,7 +10,7 @@ namespace vkr {
 	class Mesh3D;
 	class Model3D;
 
-	class Renderer3D {
+	class VKR_API Renderer3D {
 	private:
 		struct {
 			m4f view, projection;
@@ -27,7 +27,7 @@ namespace vkr {
 		Pipeline* pipeline;
 		App* app;
 	public:
-		Renderer3D(App* app, VideoContext* video, Shader* shader);
+		Renderer3D(App* app, VideoContext* video, Shader* shader, Texture* texture);
 		~Renderer3D();
 
 		void begin();
@@ -41,7 +41,7 @@ namespace vkr {
 		};
 	};
 
-	class Mesh3D {
+	class VKR_API Mesh3D {
 	private:
 		VertexBuffer* vb;
 		IndexBuffer* ib;
@@ -52,7 +52,7 @@ namespace vkr {
 		~Mesh3D();
 	};
 
-	class Model3D {
+	class VKR_API Model3D {
 	private:
 		std::vector<Mesh3D*> meshes;
 

@@ -9,7 +9,10 @@ layout (binding = 1) uniform FragmentData {
 layout (location = 0) in VertexOut {
 	vec3 normal;
 	vec3 world_pos;
+	vec2 uv;
 } fs_in;
+
+layout (binding = 2) uniform sampler2D albedo;
 
 void main() {
 	vec3 normal = normalize(fs_in.normal);
@@ -40,5 +43,5 @@ void main() {
 		light_intensity *
 		pow(max(dot(view_dir, reflect_dir), 0.0), shininess);
 
-	color = vec4(diffuse + specular, 1.0);
+	color = texture(albedo, fs_in.uv) * vec4(diffuse + specular, 1.0);
 }

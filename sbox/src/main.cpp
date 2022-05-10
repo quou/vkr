@@ -23,6 +23,8 @@ private:
 
 	Shader* shader;
 	f32 rot = 0.0f;
+
+	Texture* texture;
 public:
 	SandboxApp() : App("Sandbox", vkr::v2i(800, 600)) {}
 
@@ -35,7 +37,9 @@ public:
 
 		monkey = Model3D::from_wavefront(video, monkey_obj);
 
-		renderer = new Renderer3D(this, video, shader);
+		texture = Texture::from_file(video, "res/textures/walla.jpg");
+
+		renderer = new Renderer3D(this, video, shader, texture);
 
 		delete monkey_obj;
 	}
@@ -52,6 +56,7 @@ public:
 	void on_deinit() override {
 		delete renderer;
 		delete monkey;
+		delete texture;
 		delete shader;
 	}
 };

@@ -1,5 +1,6 @@
-include "ext/vma"
 include "ext/glfw"
+include "ext/stb"
+include "ext/vma"
 
 project "vkr"
 	kind "SharedLib"
@@ -24,8 +25,9 @@ project "vkr"
 
 	includedirs {
 		"include/vkr",
-		"ext/vma/include",
-		"ext/glfw/include"
+		"ext/glfw/include",
+		"ext/stb/include",
+		"ext/vma/include"
 	}
 
 	defines {
@@ -35,6 +37,7 @@ project "vkr"
 
 	links {
 		"glfw",
+		"stb",
 		"vma"
 	}
 

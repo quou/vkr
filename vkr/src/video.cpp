@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include <vulkan/vulkan.h>
+#include <stb_image.h>
 
 #include "vkr.hpp"
 #include "internal.hpp"
@@ -191,6 +192,7 @@ namespace vkr {
 			if (
 					(props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
 					props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) &&
+					features.samplerAnisotropy &&
 					extensions_good && swap_chain_good &&
 					qfs.graphics.has_value() && qfs.present.has_value()) {
 				info("Selected physical device: %s.", props.deviceName);
@@ -288,41 +290,51 @@ namespace vkr {
 			}
 		}
 	}
-	
-	/* Copies the VRAM from one buffer to another, similar to how memcpy works on the CPU.
-	 *
-	 * Waits for the copy to complete before returning. */
-	static void copy_buffer(impl_VideoContext* handle, VkBuffer dst, VkBuffer src, VkDeviceSize size) {
-		VkCommandBufferAllocateInfo alloc_info{};
-		alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		alloc_info.commandPool = handle->command_pool;
-		alloc_info.commandBufferCount = 1;
 
-		VkCommandBuffer command_buffer;
-		vkAllocateCommandBuffers(handle->device, &alloc_info, &command_buffer);
+	static VkCommandBuffer begin_temp_command_buffer(impl_VideoContext* handle) {
+		VkCommandBufferAllocateInfo info{};
+		info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		info.commandPool = handle->command_pool;
+		info.commandBufferCount = 1;
+
+		VkCommandBuffer buffer;
+		vkAllocateCommandBuffers(handle->device, &info, &buffer);
 
 		VkCommandBufferBeginInfo begin_info{};
 		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-		vkBeginCommandBuffer(command_buffer, &begin_info);
+		vkBeginCommandBuffer(buffer, &begin_info);
+
+		return buffer;
+	}
+
+	static void end_temp_command_buffer(impl_VideoContext* handle, VkCommandBuffer buffer) {
+		vkEndCommandBuffer(buffer);
+
+		VkSubmitInfo submit_info{};
+		submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submit_info.commandBufferCount = 1;
+		submit_info.pCommandBuffers = &buffer;
+
+		vkQueueSubmit(handle->graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+		vkQueueWaitIdle(handle->graphics_queue);
+
+		vkFreeCommandBuffers(handle->device, handle->command_pool, 1, &buffer);
+	}
+	
+	/* Copies the VRAM from one buffer to another, similar to how memcpy works on the CPU.
+	 *
+	 * Waits for the copy to complete before returning. */
+	static void copy_buffer(impl_VideoContext* handle, VkBuffer dst, VkBuffer src, VkDeviceSize size) {
+		VkCommandBuffer command_buffer = begin_temp_command_buffer(handle);
 		
 		VkBufferCopy copy{};
 		copy.size = size;
 		vkCmdCopyBuffer(command_buffer, src, dst, 1, &copy);
 
-		vkEndCommandBuffer(command_buffer);
-
-		VkSubmitInfo submit_info{};
-		submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submit_info.commandBufferCount = 1;
-		submit_info.pCommandBuffers = &command_buffer;
-
-		vkQueueSubmit(handle->graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
-		vkQueueWaitIdle(handle->graphics_queue);
-
-		vkFreeCommandBuffers(handle->device, handle->command_pool, 1, &command_buffer);
+		end_temp_command_buffer(handle, command_buffer);
 	}	
 
 	static void new_image(impl_VideoContext* handle, v2i size, VkFormat format,
@@ -353,13 +365,66 @@ namespace vkr {
 		}
 	}
 
+	static void change_image_layout(impl_VideoContext* handle, VkImage image, VkFormat format,
+		VkImageLayout src_layout, VkImageLayout dst_layout) {
+
+		auto command_buffer = begin_temp_command_buffer(handle);
+
+		VkImageMemoryBarrier barrier{};
+		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier.oldLayout = src_layout;
+		barrier.newLayout = dst_layout;
+		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.image = image;
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		barrier.subresourceRange.baseMipLevel = 0;
+		barrier.subresourceRange.levelCount = 1;
+		barrier.subresourceRange.baseArrayLayer = 0;
+		barrier.subresourceRange.layerCount = 1;
+
+		VkPipelineStageFlags src_stage, dst_stage;
+
+		if (src_layout == VK_IMAGE_LAYOUT_UNDEFINED && dst_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+			barrier.srcAccessMask = 0;
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+			src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		} else if (src_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && dst_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+			dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		} else {
+			abort_with("Bad layout transition.");
+		}
+
+		vkCmdPipelineBarrier(command_buffer, src_stage, dst_stage, 0, 0, null, 0, null, 1, &barrier);
+
+		end_temp_command_buffer(handle, command_buffer);
+	}
+
+	static void copy_buffer_to_image(impl_VideoContext* handle, VkBuffer buffer, VkImage image, v2i size) {
+		auto command_buffer = begin_temp_command_buffer(handle);
+
+		VkBufferImageCopy region{};
+		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		region.imageSubresource.layerCount = 1;
+		region.imageExtent = { (u32)size.x, (u32)size.y, 1 };
+
+		vkCmdCopyBufferToImage(command_buffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+		end_temp_command_buffer(handle, command_buffer);
+	}
+
 	static VkImageView new_image_view(impl_VideoContext* handle, VkImage image, VkFormat format, VkImageAspectFlags flags) {
 		VkImageViewCreateInfo iv_create_info{};
 		iv_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		iv_create_info.image = image;
 		iv_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
 		iv_create_info.format = format;
-
 		iv_create_info.subresourceRange.aspectMask = flags;
 		iv_create_info.subresourceRange.baseMipLevel = 0;
 		iv_create_info.subresourceRange.levelCount = 1;
@@ -437,7 +502,7 @@ namespace vkr {
 		if (vmaCreateBuffer(handle->allocator, &buffer_info, &alloc_info, buffer, buffer_memory, null) != VK_SUCCESS) {
 			abort_with("Failed to create buffer.");
 		}
-	}
+	}	
 
 	VideoContext::VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions) : current_frame(0) {
 		handle = new impl_VideoContext();
@@ -510,6 +575,7 @@ namespace vkr {
 		}
 
 		VkPhysicalDeviceFeatures device_features{};
+		device_features.samplerAnisotropy = VK_TRUE;
 
 		VkDeviceCreateInfo device_create_info{};
 		device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -907,7 +973,9 @@ namespace vkr {
 		for (usize i = 0; i < uniform_count; i++) {
 			VkDescriptorSetLayoutBinding layout_binding{};
 			layout_bindings[i].binding = uniforms[i].binding;
-			layout_bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			layout_bindings[i].descriptorType = uniforms[i].is_sampler ?
+				VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER :
+				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 			layout_bindings[i].descriptorCount = 1;
 			layout_bindings[i].stageFlags = uniforms[i].stage == Stage::vertex ?
 				VK_SHADER_STAGE_VERTEX_BIT :
@@ -924,16 +992,40 @@ namespace vkr {
 			abort_with("Failed to create descriptor set layout.");
 		}
 
+		u32 uniform_buffer_count = (u32)uniform_count;
+		u32 sampler_count = 0;
+		for (usize i = 0; i < uniform_count; i++) {
+			if (uniforms[i].is_sampler) {
+				uniform_buffer_count--;
+				sampler_count++;
+			}
+		}
+
 		/* Create descriptor pool. */
 		VkDescriptorPoolSize pool_size{};
 		pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		pool_size.descriptorCount = max_frames_in_flight * uniform_count;
 
+		VkDescriptorPoolSize pool_sizes[] = {
+			{
+				.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.descriptorCount = max_frames_in_flight * uniform_buffer_count
+			},
+			{
+				.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = max_frames_in_flight * sampler_count
+			}
+		};
+
 		VkDescriptorPoolCreateInfo pool_info{};
 		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		pool_info.poolSizeCount = 1;
-		pool_info.pPoolSizes = &pool_size;
+		pool_info.poolSizeCount = 2;
+		pool_info.pPoolSizes = pool_sizes;
 		pool_info.maxSets = max_frames_in_flight * uniform_count;
+
+		if (sampler_count == 0) {
+			pool_info.poolSizeCount--;
+		}
 
 		if (vkCreateDescriptorPool(video->handle->device, &pool_info, null, &handle->descriptor_pool) != VK_SUCCESS) {
 			abort_with("Failed to create descriptor pool.");
@@ -956,38 +1048,58 @@ namespace vkr {
 		}
 
 		for (usize i = 0; i < uniform_count; i++) {
-			handle->uniforms[i].ptr = uniforms[i].ptr;
-			handle->uniforms[i].size = uniforms[i].size;
+			if (!uniforms[i].is_sampler) {
+				handle->uniforms[i].ptr = uniforms[i].ptr;
+				handle->uniforms[i].size = uniforms[i].size;
+			}
 
 			VkDeviceSize buffer_size = handle->uniforms[i].size;
 
 			/* Create uniform buffers. */
-			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
-				new_buffer(video->handle, buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-					VMA_ALLOCATION_CREATE_MAPPED_BIT,
-					handle->uniforms[i].uniform_buffers + ii,
-					handle->uniforms[i].uniform_buffer_memories + ii);
+			if (!uniforms[i].is_sampler) {
+				for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
+					new_buffer(video->handle, buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+						VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+						VMA_ALLOCATION_CREATE_MAPPED_BIT,
+						handle->uniforms[i].uniform_buffers + ii,
+						handle->uniforms[i].uniform_buffer_memories + ii);
+				}
 			}
 
 			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
-				VkDescriptorBufferInfo buffer_info{};
-				buffer_info.buffer = handle->uniforms[i].uniform_buffers[ii];
-				buffer_info.offset = 0;
-				buffer_info.range = uniforms[i].size;
-
 				VkWriteDescriptorSet desc_write{};
 				desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				desc_write.dstSet = handle->descriptor_sets[ii];
 				desc_write.dstBinding = uniforms[i].binding;
 				desc_write.dstArrayElement = 0;
-				desc_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				desc_write.descriptorType = uniforms[i].is_sampler ?
+					VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER :
+					VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 				desc_write.descriptorCount = 1;
-				desc_write.pBufferInfo = &buffer_info;
+
+				if (uniforms[i].is_sampler) {
+					Texture* texture = (Texture*)uniforms[i].ptr;
+
+					VkDescriptorImageInfo image_info{};
+					image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					image_info.imageView = texture->handle->view;
+					image_info.sampler = texture->handle->sampler;
+
+					desc_write.pImageInfo = &image_info;
+				} else {
+					VkDescriptorBufferInfo buffer_info{};
+					buffer_info.buffer = handle->uniforms[i].uniform_buffers[ii];
+					buffer_info.offset = 0;
+					buffer_info.range = uniforms[i].size;
+
+					desc_write.pBufferInfo = &buffer_info;
+				}
 
 				vkUpdateDescriptorSets(video->handle->device, 1, &desc_write, 0, null);
 			}
 		}
+
+		this->uniform_count = uniform_buffer_count;
 
 		auto pc_ranges = new VkPushConstantRange[pcrange_count];
 		for (usize i = 0; i < pcrange_count; i++) {
@@ -1215,6 +1327,101 @@ namespace vkr {
 		vkCmdDrawIndexed(video->handle->command_buffers[video->current_frame], count, 1, 0, 0, 0);
 
 		video->object_count++;
+	}
+
+	Texture::Texture(VideoContext* video, void* data, v2i size, u32 component_count) :
+		video(video), size(size), component_count(component_count) {
+
+		handle = new impl_Texture();
+
+		VkDeviceSize image_size = size.x * size.y * component_count;
+
+		VkBuffer stage_buffer;
+		VmaAllocation stage_buffer_memory;
+
+		new_buffer(video->handle, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			VMA_ALLOCATION_CREATE_MAPPED_BIT,
+			&stage_buffer, &stage_buffer_memory);
+		
+		void* remote_data;
+		vmaMapMemory(video->handle->allocator, stage_buffer_memory, &remote_data);
+		memcpy(remote_data, data, image_size);
+		vmaUnmapMemory(video->handle->allocator, stage_buffer_memory);
+
+		auto format = VK_FORMAT_R8G8B8A8_SRGB;
+
+		new_image(video->handle, size, format, VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			&handle->image, &handle->memory);
+		
+		change_image_layout(video->handle, handle->image, format,
+				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		copy_buffer_to_image(video->handle, stage_buffer, handle->image, size);
+		change_image_layout(video->handle, handle->image, format,
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	
+		vmaDestroyBuffer(video->handle->allocator, stage_buffer, stage_buffer_memory);
+
+		VkImageViewCreateInfo view_info{};
+		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view_info.format = VK_FORMAT_R8G8B8A8_SRGB;
+		view_info.image = handle->image;
+		view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view_info.subresourceRange.baseMipLevel = 0;
+		view_info.subresourceRange.levelCount = 1;
+		view_info.subresourceRange.baseArrayLayer = 0;
+		view_info.subresourceRange.layerCount = 1;
+
+		if (vkCreateImageView(video->handle->device, &view_info, null, &handle->view) != VK_SUCCESS) {
+			abort_with("Failed to create image view.");
+		}
+
+		/* Used to get the anisotropy level that the hardware supports. */
+		VkPhysicalDeviceProperties pprops{};
+		vkGetPhysicalDeviceProperties(video->handle->pdevice, &pprops);
+
+		VkSamplerCreateInfo sampler_info{};
+		sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		sampler_info.magFilter = VK_FILTER_LINEAR;
+		sampler_info.minFilter = VK_FILTER_LINEAR;
+		sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		sampler_info.anisotropyEnable = VK_TRUE;
+		sampler_info.maxAnisotropy = pprops.limits.maxSamplerAnisotropy;
+		sampler_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+		sampler_info.unnormalizedCoordinates = VK_FALSE;
+		sampler_info.compareEnable = VK_FALSE;
+		sampler_info.compareOp = VK_COMPARE_OP_ALWAYS;
+		sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+		if (vkCreateSampler(video->handle->device, &sampler_info, null, &handle->sampler) != VK_SUCCESS) {
+			abort_with("Failed to create texture sampler.");
+		}
+	}
+
+	Texture::~Texture() {
+		vkDestroySampler(video->handle->device, handle->sampler, null);
+		vkDestroyImageView(video->handle->device, handle->view, null);
+		vmaDestroyImage(video->handle->allocator, handle->image, handle->memory);
+	}
+
+	Texture* Texture::from_file(VideoContext* video, const char* file_path) {
+		v2i size;
+		i32 channels;
+		void* data = stbi_load(file_path, &size.x, &size.y, &channels, 4);
+		if (!data) {
+			error("Failed to load `%s': %s.", file_path, stbi_failure_reason());
+			return null;
+		}
+
+		Texture* r = new Texture(video, data, size, 4);
+		
+		stbi_image_free(data);
+		
+		return r;
 	}
 
 	Shader::Shader(VideoContext* video, const u8* v_buf, const u8* f_buf, usize v_size, usize f_size) : video(video) {

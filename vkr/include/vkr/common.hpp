@@ -44,6 +44,7 @@ namespace vkr {
 	class Pipeline;
 	class Shader;
 	class Shader;
+	class Texture;
 	class UniformBuffer;
 	class VertexBuffer;
 	class VideoContext;
