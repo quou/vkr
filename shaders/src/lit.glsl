@@ -45,15 +45,15 @@ layout (location = 0) in VertexOut {
 	vec2 uv;
 } fs_in;
 
-layout (binding = 2) uniform sampler2D albedo;
+layout (set = 1, binding = 0) uniform sampler2D albedo;
 
 void main() {
 	vec3 normal = normalize(fs_in.normal);
 
 	const vec3 light_pos = vec3(0.0, 0.0, 5.0);
 	const vec3 light_color = vec3(1.0, 1.0, 1.0);
-	const float light_range = 10.0;
-	const float light_intensity = 1.0;
+	const float light_range = 30.0;
+	const float light_intensity = 10.0;
 
 	const float shininess = 200.0;
 
@@ -77,5 +77,6 @@ void main() {
 		pow(max(dot(view_dir, reflect_dir), 0.0), shininess);
 
 	color = texture(albedo, fs_in.uv) * vec4(diffuse + specular, 1.0);
+	//color = vec4(vec3(0.1) + diffuse + specular, 1.0);
 }
 #end FRAGMENT

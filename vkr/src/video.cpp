@@ -816,8 +816,9 @@ namespace vkr {
 	Pipeline::Pipeline(VideoContext* video, Flags flags, Shader* shader, usize stride,
 			Attribute* attribs, usize attrib_count,
 			UniformBuffer* uniforms, usize uniform_count,
+			SamplerBinding* sampler_bindings, usize sampler_binding_count,
 			PushConstantRange* pcranges, usize pcrange_count) :
-			video(video), uniform_count(uniform_count) {
+			video(video), uniform_count(uniform_count), sampler_binding_count(sampler_binding_count) {
 		handle = new impl_Pipeline();
 
 		VkAttachmentDescription depth_attachment{};
@@ -969,18 +970,44 @@ namespace vkr {
 
 		/* Set up uniform buffers and descriptor sets. */
 		handle->uniforms = new impl_UniformBuffer[uniform_count];
+		handle->sampler_bindings = new impl_SamplerBinding[sampler_binding_count];
+		handle->temp_sets = new VkDescriptorSet[sampler_binding_count + 1];
+
 		auto layout_bindings = new VkDescriptorSetLayoutBinding[uniform_count];
 		for (usize i = 0; i < uniform_count; i++) {
-			VkDescriptorSetLayoutBinding layout_binding{};
+			memset(layout_bindings + i, 0, sizeof(*layout_bindings));
+
 			layout_bindings[i].binding = uniforms[i].binding;
-			layout_bindings[i].descriptorType = uniforms[i].is_sampler ?
-				VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER :
-				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			layout_bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 			layout_bindings[i].descriptorCount = 1;
 			layout_bindings[i].stageFlags = uniforms[i].stage == Stage::vertex ?
 				VK_SHADER_STAGE_VERTEX_BIT :
 				VK_SHADER_STAGE_FRAGMENT_BIT;
 			layout_bindings[i].pImmutableSamplers = null;
+		}
+
+		auto s_layout_bindings = new VkDescriptorSetLayoutBinding[sampler_binding_count];
+		u32 sampler_count = 0;
+		for (usize i = 0; i < sampler_binding_count; i++)  {
+			memset(s_layout_bindings + i, 0, sizeof(*s_layout_bindings));
+
+			bool dup = false;
+			for (u32 ii = 0; ii < sampler_count; ii++) {
+				if (sampler_bindings[i].binding == s_layout_bindings[ii].binding) {
+					dup = true;
+					break;
+				}
+			}
+			if (dup) { continue; }
+
+			u32 idx = sampler_count++;
+			s_layout_bindings[idx].binding = sampler_bindings[idx].binding;
+			s_layout_bindings[idx].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			s_layout_bindings[idx].descriptorCount = 1;
+			s_layout_bindings[idx].stageFlags = sampler_bindings[idx].stage == Stage::vertex ?
+				VK_SHADER_STAGE_VERTEX_BIT :
+				VK_SHADER_STAGE_FRAGMENT_BIT;
+			s_layout_bindings[idx].pImmutableSamplers = null;
 		}
 
 		VkDescriptorSetLayoutCreateInfo layout_info{};
@@ -992,13 +1019,13 @@ namespace vkr {
 			abort_with("Failed to create descriptor set layout.");
 		}
 
-		u32 uniform_buffer_count = (u32)uniform_count;
-		u32 sampler_count = 0;
-		for (usize i = 0; i < uniform_count; i++) {
-			if (uniforms[i].is_sampler) {
-				uniform_buffer_count--;
-				sampler_count++;
-			}
+		VkDescriptorSetLayoutCreateInfo s_layout_info{};
+		s_layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		s_layout_info.bindingCount = sampler_count;
+		s_layout_info.pBindings = s_layout_bindings;
+
+		if (vkCreateDescriptorSetLayout(video->handle->device, &s_layout_info, null, &handle->sampler_desc_set_layout) != VK_SUCCESS) {
+			abort_with("Failed to create descriptor set layout.");
 		}
 
 		/* Create descriptor pool. */
@@ -1009,11 +1036,11 @@ namespace vkr {
 		VkDescriptorPoolSize pool_sizes[] = {
 			{
 				.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-				.descriptorCount = max_frames_in_flight * uniform_buffer_count
+				.descriptorCount = max_frames_in_flight * (u32)uniform_count
 			},
 			{
 				.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.descriptorCount = max_frames_in_flight * sampler_count
+				.descriptorCount = max_frames_in_flight * (u32)sampler_binding_count
 			}
 		};
 
@@ -1021,11 +1048,9 @@ namespace vkr {
 		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		pool_info.poolSizeCount = 2;
 		pool_info.pPoolSizes = pool_sizes;
-		pool_info.maxSets = max_frames_in_flight * uniform_count;
-
-		if (sampler_count == 0) {
-			pool_info.poolSizeCount--;
-		}
+		pool_info.maxSets = 
+			(max_frames_in_flight * uniform_count) +
+			(max_frames_in_flight * sampler_binding_count);
 
 		if (vkCreateDescriptorPool(video->handle->device, &pool_info, null, &handle->descriptor_pool) != VK_SUCCESS) {
 			abort_with("Failed to create descriptor pool.");
@@ -1047,59 +1072,78 @@ namespace vkr {
 			abort_with("Failed to allocate descriptor sets.");
 		}
 
-		for (usize i = 0; i < uniform_count; i++) {
-			if (!uniforms[i].is_sampler) {
-				handle->uniforms[i].ptr = uniforms[i].ptr;
-				handle->uniforms[i].size = uniforms[i].size;
+		for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
+			layouts[ii] = handle->sampler_desc_set_layout;
+		}
+
+		/* Create sampler descriptor sets. */
+		for (usize i = 0; i < sampler_binding_count; i++) {
+			VkDescriptorSetAllocateInfo set_alloc_info{};
+			set_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			set_alloc_info.descriptorPool = handle->descriptor_pool;
+			set_alloc_info.descriptorSetCount = max_frames_in_flight;
+			set_alloc_info.pSetLayouts = layouts;
+
+			if (vkAllocateDescriptorSets(video->handle->device, &set_alloc_info, handle->sampler_bindings[i].descriptor_sets) != VK_SUCCESS) {
+				abort_with("Failed to allocate descriptor sets.");
 			}
+		}
+
+		for (usize i = 0; i < uniform_count; i++) {
+			handle->uniforms[i].ptr = uniforms[i].ptr;
+			handle->uniforms[i].size = uniforms[i].size;
 
 			VkDeviceSize buffer_size = handle->uniforms[i].size;
 
 			/* Create uniform buffers. */
-			if (!uniforms[i].is_sampler) {
-				for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
-					new_buffer(video->handle, buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-						VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-						VMA_ALLOCATION_CREATE_MAPPED_BIT,
-						handle->uniforms[i].uniform_buffers + ii,
-						handle->uniforms[i].uniform_buffer_memories + ii);
-				}
+			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
+				new_buffer(video->handle, buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+					VMA_ALLOCATION_CREATE_MAPPED_BIT,
+					handle->uniforms[i].uniform_buffers + ii,
+					handle->uniforms[i].uniform_buffer_memories + ii);
 			}
 
+			/* Write the descriptor sets */
 			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
+				VkDescriptorBufferInfo buffer_info{};
+				buffer_info.buffer = handle->uniforms[i].uniform_buffers[ii];
+				buffer_info.offset = 0;
+				buffer_info.range = uniforms[i].size;
+
 				VkWriteDescriptorSet desc_write{};
 				desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				desc_write.dstSet = handle->descriptor_sets[ii];
 				desc_write.dstBinding = uniforms[i].binding;
 				desc_write.dstArrayElement = 0;
-				desc_write.descriptorType = uniforms[i].is_sampler ?
-					VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER :
-					VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				desc_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 				desc_write.descriptorCount = 1;
-
-				if (uniforms[i].is_sampler) {
-					Texture* texture = (Texture*)uniforms[i].ptr;
-
-					VkDescriptorImageInfo image_info{};
-					image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-					image_info.imageView = texture->handle->view;
-					image_info.sampler = texture->handle->sampler;
-
-					desc_write.pImageInfo = &image_info;
-				} else {
-					VkDescriptorBufferInfo buffer_info{};
-					buffer_info.buffer = handle->uniforms[i].uniform_buffers[ii];
-					buffer_info.offset = 0;
-					buffer_info.range = uniforms[i].size;
-
-					desc_write.pBufferInfo = &buffer_info;
-				}
+				desc_write.pBufferInfo = &buffer_info;
 
 				vkUpdateDescriptorSets(video->handle->device, 1, &desc_write, 0, null);
 			}
 		}
 
-		this->uniform_count = uniform_buffer_count;
+		/* Write the sampler descriptor sets. */
+		for (usize i = 0; i < sampler_binding_count; i++) {
+			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
+				VkDescriptorImageInfo image_info{};
+				image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				image_info.imageView = sampler_bindings[i].texture->handle->view;
+				image_info.sampler = sampler_bindings[i].texture->handle->sampler;
+
+				VkWriteDescriptorSet desc_write{};
+				desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				desc_write.dstSet = handle->sampler_bindings[i].descriptor_sets[ii];
+				desc_write.dstBinding = sampler_bindings[i].binding;
+				desc_write.dstArrayElement = 0;
+				desc_write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				desc_write.descriptorCount = 1;
+				desc_write.pImageInfo = &image_info;
+
+				vkUpdateDescriptorSets(video->handle->device, 1, &desc_write, 0, null);
+			}
+		}
 
 		auto pc_ranges = new VkPushConstantRange[pcrange_count];
 		for (usize i = 0; i < pcrange_count; i++) {
@@ -1111,10 +1155,15 @@ namespace vkr {
 			pc_ranges[i].size = pcranges[i].size;
 		}
 
+		VkDescriptorSetLayout set_layouts[] = {
+			handle->descriptor_set_layout,
+			handle->sampler_desc_set_layout
+		};
+
 		VkPipelineLayoutCreateInfo pipeline_layout_info{};
 		pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipeline_layout_info.setLayoutCount = 1;
-		pipeline_layout_info.pSetLayouts = &handle->descriptor_set_layout;
+		pipeline_layout_info.setLayoutCount = 2;
+		pipeline_layout_info.pSetLayouts = set_layouts;
 		pipeline_layout_info.pushConstantRangeCount = pcrange_count;
 		pipeline_layout_info.pPushConstantRanges = pc_ranges;
 
@@ -1124,6 +1173,7 @@ namespace vkr {
 
 		delete[] pc_ranges;
 		delete[] layout_bindings;
+		delete[] s_layout_bindings;
 
 		VkGraphicsPipelineCreateInfo pipeline_info{};
 		pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1161,13 +1211,17 @@ namespace vkr {
 
 		vkDestroyDescriptorPool(video->handle->device, handle->descriptor_pool, null);
 		vkDestroyDescriptorSetLayout(video->handle->device, handle->descriptor_set_layout, null);
+		vkDestroyDescriptorSetLayout(video->handle->device, handle->sampler_desc_set_layout, null);
 
 		delete[] handle->uniforms;
 
 		vkDestroyPipeline(video->handle->device, handle->pipeline, null);
 		vkDestroyPipelineLayout(video->handle->device, handle->pipeline_layout, null);
 		vkDestroyRenderPass(video->handle->device, handle->render_pass, null);
-	
+
+		delete[] handle->sampler_bindings;
+		delete[] handle->temp_sets;
+
 		delete handle;
 	}
 
@@ -1227,6 +1281,10 @@ namespace vkr {
 
 		vkCmdBeginRenderPass(video->handle->command_buffers[video->current_frame], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, handle->pipeline);
+
+		vkCmdBindDescriptorSets(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
+			handle->pipeline_layout, 0, 1,
+			&handle->descriptor_sets[video->current_frame], 0, null);
 	}
 
 	void Pipeline::end() {
@@ -1244,6 +1302,16 @@ namespace vkr {
 			VK_SHADER_STAGE_VERTEX_BIT :
 			VK_SHADER_STAGE_FRAGMENT_BIT,
 		offset, size, ptr);
+	}
+
+	void Pipeline::bind_samplers(u32* indices, usize index_count) {
+		for (usize i = 0; i < index_count; i++) {
+			handle->temp_sets[i] = handle->sampler_bindings[indices[i]].descriptor_sets[video->current_frame];
+		}
+
+		vkCmdBindDescriptorSets(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
+			handle->pipeline_layout, 1, index_count,
+			handle->temp_sets, 0, null);
 	}
 
 	Buffer::Buffer(VideoContext* video) : video(video) {
@@ -1317,12 +1385,6 @@ namespace vkr {
 	}
 
 	void IndexBuffer::draw() {
-		for (usize i = 0; i < video->pipeline->uniform_count; i++) {
-			vkCmdBindDescriptorSets(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
-				video->pipeline->handle->pipeline_layout, 0, 1,
-				&video->pipeline->handle->descriptor_sets[video->current_frame], 0, null);
-		}
-
 		vkCmdBindIndexBuffer(video->handle->command_buffers[video->current_frame], handle->buffer, 0, VK_INDEX_TYPE_UINT16);
 		vkCmdDrawIndexed(video->handle->command_buffers[video->current_frame], count, 1, 0, 0, 0);
 
@@ -1406,6 +1468,8 @@ namespace vkr {
 		vkDestroySampler(video->handle->device, handle->sampler, null);
 		vkDestroyImageView(video->handle->device, handle->view, null);
 		vmaDestroyImage(video->handle->allocator, handle->image, handle->memory);
+
+		delete handle;
 	}
 
 	Texture* Texture::from_file(VideoContext* video, const char* file_path) {

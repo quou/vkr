@@ -27,12 +27,18 @@ namespace vkr {
 		Pipeline* pipeline;
 		App* app;
 	public:
-		Renderer3D(App* app, VideoContext* video, Shader* shader, Texture* texture);
+		struct Material {
+			Texture* albedo;
+
+			static inline usize get_texture_count() { return 1; }
+		};
+
+		Renderer3D(App* app, VideoContext* video, Shader* shader, Material* materials, usize material_count);
 		~Renderer3D();
 
 		void begin();
 		void end();
-		void draw(Model3D* model, m4f transform);
+		void draw(Model3D* model, m4f transform, usize material_id);
 
 		struct Vertex {
 			v3f position;

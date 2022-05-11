@@ -6,7 +6,7 @@
 #include "vkr.hpp"
 
 #define max_frames_in_flight 3
-#define max_bound_textures 256
+#define max_bound_samplers 256
 
 namespace vkr {
 	struct impl_VideoContext {
@@ -70,6 +70,13 @@ namespace vkr {
 		usize size;
 	};
 
+	struct impl_SamplerBinding {
+		Texture* texture;
+		u32 binding;
+
+		VkDescriptorSet descriptor_sets[max_frames_in_flight];
+	};
+
 	struct impl_Pipeline {
 		VkRenderPass render_pass;
 		VkPipelineLayout pipeline_layout;
@@ -80,6 +87,14 @@ namespace vkr {
 		VkDescriptorSetLayout descriptor_set_layout;
 		impl_UniformBuffer* uniforms;
 		VkDescriptorSet descriptor_sets[max_frames_in_flight];
+
+		VkDescriptorSetLayout sampler_desc_set_layout;
+		impl_SamplerBinding* sampler_bindings;
+
+		/* Used to push descriptor sets into to be bound with
+		 * vkCmdBindDescriptorSets to avoid re-creating a vector
+		 * every frame or something equally dumb. */
+		VkDescriptorSet* temp_sets;
 	};
 
 	struct impl_Shader {

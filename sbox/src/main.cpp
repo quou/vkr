@@ -24,7 +24,8 @@ private:
 	Shader* shader;
 	f32 rot = 0.0f;
 
-	Texture* texture;
+	Texture* wall_a;
+	Texture* wood_a;
 public:
 	SandboxApp() : App("Sandbox", vkr::v2i(800, 600)) {}
 
@@ -37,17 +38,27 @@ public:
 
 		monkey = Model3D::from_wavefront(video, monkey_obj);
 
-		texture = Texture::from_file(video, "res/textures/walla.jpg");
+		wall_a = Texture::from_file(video, "res/textures/walla.jpg");
+		wood_a = Texture::from_file(video, "res/textures/wooda.jpg");
 
-		renderer = new Renderer3D(this, video, shader, texture);
+		Renderer3D::Material materials[] = {
+			{
+				.albedo = wall_a
+			},
+			{
+				.albedo = wood_a
+			}
+		};
+
+		renderer = new Renderer3D(this, video, shader, materials, 2);
 
 		delete monkey_obj;
 	}
 
 	void on_update(f64 ts) override {
 		renderer->begin();
-			renderer->draw(monkey, m4f::translate(m4f::identity(), v3f(-2.5f, 0.0f, 0.0f)));
-			renderer->draw(monkey, m4f::rotate(m4f::identity(), rot, v3f(0.0f, 1.0f, 0.0f)));
+			renderer->draw(monkey, m4f::translate(m4f::identity(), v3f(-2.5f, 0.0f, 0.0f)), 0);
+			renderer->draw(monkey, m4f::rotate(m4f::identity(), rot, v3f(0.0f, 1.0f, 0.0f)), 1);
 		renderer->end();
 
 		rot += 1.0f * (f32)ts;
@@ -56,7 +67,8 @@ public:
 	void on_deinit() override {
 		delete renderer;
 		delete monkey;
-		delete texture;
+		delete wall_a;
+		delete wood_a;
 		delete shader;
 	}
 };

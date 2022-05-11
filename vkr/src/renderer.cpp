@@ -2,7 +2,7 @@
 #include "vkr.hpp"
 
 namespace vkr {
-	Renderer3D::Renderer3D(App* app, VideoContext* video, Shader* shader, Texture* texture) :
+	Renderer3D::Renderer3D(App* app, VideoContext* video, Shader* shader, Material* materials, usize material_count) :
 		app(app) {
 
 		Pipeline::Attribute attribs[] = {
@@ -25,26 +25,19 @@ namespace vkr {
 
 		Pipeline::UniformBuffer ubuffers[] = {
 			{
+				.name    = "vertex_uniform_buffer",
 				.binding = 0,
-				.is_sampler = false,
 				.ptr     = &v_ub,
 				.size    = sizeof(v_ub),
 				.stage   = Pipeline::Stage::vertex
 			},
 			{
+				.name    = "fragment_uniform_buffer",
 				.binding = 1,
-				.is_sampler = false,
 				.ptr     = &f_ub,
 				.size    = sizeof(f_ub),
 				.stage   = Pipeline::Stage::fragment
 			},
-			{
-				.binding = 2,
-				.is_sampler = true,
-				.ptr = texture,
-				.size = 0,
-				.stage = Pipeline::Stage::fragment
-			}
 		};
 
 		Pipeline::PushConstantRange pc[] = {
@@ -55,13 +48,27 @@ namespace vkr {
 			}
 		};
 
+		usize sampler_binding_count = material_count * Material::get_texture_count();
+		auto samplers = new Pipeline::SamplerBinding[sampler_binding_count];
+		for (usize i = 0; i < material_count; i += Material::get_texture_count()) {
+			Pipeline::SamplerBinding* albedo_binding = samplers + i;
+
+			albedo_binding->name = "albedo";
+			albedo_binding->binding = 0;
+			albedo_binding->texture = materials[i].albedo;
+			albedo_binding->stage = Pipeline::Stage::fragment;
+		};
+
 		pipeline = new Pipeline(video,
 			Pipeline::Flags::depth_test,
 			shader,
 			sizeof(Vertex),
 			attribs, 3,
-			ubuffers, 3,
+			ubuffers, 2,
+			samplers, sampler_binding_count,
 			pc, 1);
+
+		delete[] samplers;
 
 		/* TODO: Make this better. */
 		pipeline->make_default();
@@ -88,10 +95,15 @@ namespace vkr {
 		pipeline->end();
 	}
 
-	void Renderer3D::draw(Model3D* model, m4f transform) {
+	void Renderer3D::draw(Model3D* model, m4f transform, usize material_id) {
 		v_pc.transform = transform;
 		for (auto mesh : model->meshes) {
+			u32 samplers[] = {
+				(u32)((material_id + 0) * Material::get_texture_count()) /* albedo */
+			};
+
 			pipeline->push_constant(Pipeline::Stage::vertex, v_pc);
+			pipeline->bind_samplers(samplers, Material::get_texture_count());
 			mesh->vb->bind();
 			mesh->ib->draw();
 		}

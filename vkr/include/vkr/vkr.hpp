@@ -70,6 +70,7 @@ namespace vkr {
 		impl_Pipeline* handle;
 
 		usize uniform_count;
+		usize sampler_binding_count;
 
 		friend class IndexBuffer;
 	public:
@@ -86,14 +87,19 @@ namespace vkr {
 			} type;
 		};
 
-		/* If `is_sampler' is set to true, `ptr' must be
-		 * a valid pointer to a `Texture'. */
 		struct UniformBuffer {
 			const char* name;
 			u32 binding;
-			bool is_sampler;
 			void* ptr;
 			usize size;
+
+			Stage stage;
+		};
+
+		struct SamplerBinding {
+			const char* name;
+			u32 binding;
+			Texture* texture;
 
 			Stage stage;
 		};
@@ -111,6 +117,7 @@ namespace vkr {
 		Pipeline(VideoContext* video, Flags flags, Shader* shader, usize stride,
 			Attribute* attribs, usize attrib_count,
 			UniformBuffer* uniforms = null, usize uniform_count = 0,
+			SamplerBinding* sampler_bindings = null, usize sampler_binding_count = 0,
 			PushConstantRange* pcranges = null, usize pcrange_count = 0);
 		virtual ~Pipeline();
 
@@ -120,6 +127,7 @@ namespace vkr {
 		void end();
 
 		void push_constant(Stage stage, const void* ptr, usize size, usize offset = 0);
+		void bind_samplers(u32* indices, usize index_count);
 
 		template <typename T>
 		void push_constant(Stage stage, const T& c, usize offset = 0) {
