@@ -51,6 +51,18 @@ public:
 		};
 
 		renderer = new Renderer3D(this, video, shader, materials, 2);
+		renderer->lights.push_back(Renderer3D::Light {
+			.type = Renderer3D::Light::Type::point,
+			.intensity = 10.0f,
+			.specular = v3f(1.0f, 1.0f, 1.0f),
+			.diffuse = v3f(1.0f, 1.0f, 1.0f),
+			.as = {
+				.point = {
+					.position = v3f(0.0f, 0.0f, 5.0f),
+					.range = 10.0f
+				}
+			}
+		});
 
 		delete monkey_obj;
 	}

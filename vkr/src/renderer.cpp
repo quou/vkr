@@ -88,6 +88,23 @@ namespace vkr {
 
 		f_ub.camera_pos = camera_pos;
 
+		f_ub.point_light_count = 0;
+		for (usize i = 0; i < lights.size(); i++) {
+			auto light = &lights[i];
+
+			switch (light->type) {
+				case Light::Type::point: {
+					auto idx = f_ub.point_light_count++;
+					f_ub.point_lights[idx].intensity = light->intensity;
+					f_ub.point_lights[idx].diffuse   = light->diffuse;
+					f_ub.point_lights[idx].specular  = light->specular;
+					f_ub.point_lights[idx].position  = light->as.point.position;
+					f_ub.point_lights[idx].range     = light->as.point.range;
+				} break;
+				default: break;
+			}
+		}
+
 		pipeline->begin();
 	}
 

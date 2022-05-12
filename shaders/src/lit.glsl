@@ -33,10 +33,20 @@ void main() {
 
 #begin FRAGMENT
 
+#define max_point_lights 32
+
+struct PointLight {
+	float intensity, range;
+	vec3 diffuse, specular;
+	vec3 position;
+};
+
 layout (location = 0) out vec4 color;
 
 layout (binding = 1) uniform FragmentData {
 	vec3 camera_pos;
+	int point_light_count;
+	PointLight point_lights[max_point_lights];
 } data;
 
 layout (location = 0) in VertexOut {
@@ -47,36 +57,39 @@ layout (location = 0) in VertexOut {
 
 layout (set = 1, binding = 0) uniform sampler2D albedo;
 
-void main() {
-	vec3 normal = normalize(fs_in.normal);
+vec3 compute_point_light(vec3 normal, vec3 view_dir, PointLight light) {
+	vec3 light_dir = normalize(light.position - fs_in.world_pos);
+	vec3 reflect_dir = reflect(light_dir, normal);
 
-	const vec3 light_pos = vec3(0.0, 0.0, 5.0);
-	const vec3 light_color = vec3(1.0, 1.0, 1.0);
-	const float light_range = 30.0;
-	const float light_intensity = 10.0;
+	float dist = length(light.position - fs_in.world_pos);
 
-	const float shininess = 200.0;
-
-	vec3 view_dir = normalize(data.camera_pos - fs_in.world_pos);
-
-	vec3 light_dir = normalize(light_pos - fs_in.world_pos);
-	vec3 reflect_dir = reflect(normal, -light_dir);
-
-	float attenuation = 1.0 / (pow(length(light_pos - fs_in.world_pos), 2.0) + 1);
+	float attenuation = 1.0 / (pow((dist / light.range) * 5.0, 2.0) + 1);
 
 	vec3 diffuse =
 		attenuation *
-		light_color *
-		light_intensity *
+		light.diffuse *
+		light.intensity *
 		max(dot(light_dir, normal), 0.0);
 
 	vec3 specular =
 		attenuation *
-		light_color *
-		light_intensity *
-		pow(max(dot(view_dir, reflect_dir), 0.0), shininess);
+		light.specular *
+		light.intensity *
+		pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
 
-	color = texture(albedo, fs_in.uv) * vec4(diffuse + specular, 1.0);
-	//color = vec4(vec3(0.1) + diffuse + specular, 1.0);
+	return diffuse + specular;
+}
+
+void main() {
+	vec3 normal = normalize(fs_in.normal);
+	vec3 view_dir = normalize(data.camera_pos - fs_in.world_pos);
+
+	vec3 lighting_result = vec3(0.0);
+
+	for (int i = 0; i < data.point_light_count; i++) {
+		lighting_result += compute_point_light(normal, view_dir, data.point_lights[i]);
+	}
+
+	color = texture(albedo, fs_in.uv) * vec4(lighting_result, 1.0);
 }
 #end FRAGMENT

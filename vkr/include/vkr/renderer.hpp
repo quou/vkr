@@ -10,14 +10,27 @@ namespace vkr {
 	class Mesh3D;
 	class Model3D;
 
+	static usize constexpr max_point_lights = 32;
+
 	class VKR_API Renderer3D {
 	private:
+		struct impl_PointLight {
+			alignas(4)  float intensity;
+			alignas(4)  float range;
+			alignas(16) v3f diffuse;
+			alignas(16) v3f specular;
+			alignas(16) v3f position;
+		};
+
 		struct {
 			m4f view, projection;
 		} v_ub;
 
 		struct {
-			v3f camera_pos;
+			alignas(16) v3f camera_pos;
+
+			i32 point_light_count;
+			impl_PointLight point_lights[max_point_lights];
 		} f_ub;
 
 		struct {
@@ -32,6 +45,25 @@ namespace vkr {
 
 			static inline usize get_texture_count() { return 1; }
 		};
+
+		struct Light {
+			enum class Type {
+				point
+			} type;
+
+			f32 intensity;
+			v3f specular;
+			v3f diffuse;
+
+			union {
+				struct {
+					v3f position;
+					f32 range;
+				} point;
+			} as;
+		};
+
+		std::vector<Light> lights;
 
 		Renderer3D(App* app, VideoContext* video, Shader* shader, Material* materials, usize material_count);
 		~Renderer3D();
