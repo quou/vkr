@@ -142,6 +142,11 @@ namespace vkr {
 	}
 
 	template <typename T>
+	v2<T> operator-(const v2<T>& v) {
+		return v2<T>(-v.x, -v.y);
+	}
+
+	template <typename T>
 	struct v3 {
 		T x, y, z;
 
@@ -274,6 +279,11 @@ namespace vkr {
 	}
 
 	template <typename T>
+	v3<T> operator-(const v3<T>& v) {
+		return v3<T>(-v.x, -v.y, -v.z);
+	}
+
+	template <typename T>
 	struct v4 {
 		T x, y, z, w;
 
@@ -400,6 +410,11 @@ namespace vkr {
 	template <typename T>
 	v4<T> operator/(T lhs, v4<T> rhs) {
 		return v4<T>(lhs / rhs.x, lhs / rhs.y, lhs / rhs.z, lhs - rhs.w);
+	}
+
+	template <typename T>
+	v4<T> operator-(const v4<T>& v) {
+		return v4<T>(-v.x, -v.y, -v.z, -v.w);
 	}
 
 	typedef v2<i32> v2i;
