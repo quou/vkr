@@ -60,7 +60,7 @@ namespace vkr {
 		};
 
 		pipeline = new Pipeline(video,
-			Pipeline::Flags::depth_test,
+			Pipeline::Flags::depth_test | Pipeline::Flags::cull_back_face,
 			shader,
 			sizeof(Vertex),
 			attribs, 3,
@@ -71,7 +71,7 @@ namespace vkr {
 		delete[] samplers;
 
 		/* TODO: Make this better. */
-		pipeline->make_default();
+//		pipeline->make_default();
 	}
 
 	Renderer3D::~Renderer3D() {

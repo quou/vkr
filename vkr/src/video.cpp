@@ -472,13 +472,13 @@ namespace vkr {
 		return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
 
-	static void new_depth_resources(impl_VideoContext* handle) {
+	static void new_depth_resources(impl_VideoContext* handle, VkImage* image, VkImageView* view, VmaAllocation* memory) {
 		VkFormat depth_format = find_depth_format(handle);
 
 		new_image(handle, v2i((i32)handle->swapchain_extent.width, (i32)handle->swapchain_extent.height),
 			depth_format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &handle->depth_image, &handle->depth_memory);
-		handle->depth_image_view = new_image_view(handle, handle->depth_image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);	
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory);
+		*view = new_image_view(handle, *image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
 	}
 
 	static void new_buffer(impl_VideoContext* handle, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags props,
@@ -729,9 +729,6 @@ namespace vkr {
 			vkDestroyImageView(handle->device, handle->swapchain_image_views[i], null);
 		}
 
-		vkDestroyImageView(handle->device, handle->depth_image_view, null);
-		vmaDestroyImage(handle->allocator, handle->depth_image, handle->depth_memory);
-
 		vkDestroySwapchainKHR(handle->device, handle->swapchain, null);
 
 		vmaDestroyAllocator(handle->allocator);
@@ -818,8 +815,11 @@ namespace vkr {
 			UniformBuffer* uniforms, usize uniform_count,
 			SamplerBinding* sampler_bindings, usize sampler_binding_count,
 			PushConstantRange* pcranges, usize pcrange_count) :
-			video(video), uniform_count(uniform_count), sampler_binding_count(sampler_binding_count) {
+			video(video), uniform_count(uniform_count), sampler_binding_count(sampler_binding_count),
+			flags(flags) {
 		handle = new impl_Pipeline();
+
+		bool use_depth = flags & Flags::depth_test;
 
 		VkAttachmentDescription depth_attachment{};
 		depth_attachment.format = find_depth_format(video->handle);
@@ -854,7 +854,10 @@ namespace vkr {
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &color_attachment_ref;
-		subpass.pDepthStencilAttachment = &depth_attachment_ref;
+
+		if (use_depth) {
+			subpass.pDepthStencilAttachment = &depth_attachment_ref;
+		}
 
 		VkSubpassDependency dep{};
 		dep.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -864,13 +867,18 @@ namespace vkr {
 		dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 		dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-		VkAttachmentDescription attachments[] = {
-			color_attachment, depth_attachment
-		};
+		u32 attachment_count = 0;
+
+		VkAttachmentDescription attachments[max_attachments];
+		attachments[attachment_count++] = color_attachment;
+
+		if (use_depth) {
+			attachments[attachment_count++] = depth_attachment;
+		}
 
 		VkRenderPassCreateInfo render_pass_info{};
 		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		render_pass_info.attachmentCount = 2;
+		render_pass_info.attachmentCount = attachment_count;
 		render_pass_info.pAttachments = attachments;
 		render_pass_info.subpassCount = 1;
 		render_pass_info.pSubpasses = &subpass;
@@ -936,7 +944,10 @@ namespace vkr {
 		rasteriser.rasterizerDiscardEnable = VK_FALSE;
 		rasteriser.polygonMode = VK_POLYGON_MODE_FILL;
 		rasteriser.lineWidth = 1.0f;
-		rasteriser.cullMode = VK_CULL_MODE_BACK_BIT;
+		rasteriser.cullMode =
+			(flags & Flags::cull_back_face)  ? VK_CULL_MODE_BACK_BIT :
+			(flags & Flags::cull_front_face) ? VK_CULL_MODE_FRONT_BIT :
+			VK_CULL_MODE_NONE;
 		rasteriser.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 		rasteriser.depthBiasEnable = VK_FALSE;
 
@@ -1196,6 +1207,35 @@ namespace vkr {
 		}
 
 		delete[] vk_attribs;
+
+		/* Create the depth buffer */
+		if (use_depth) {
+			new_depth_resources(video->handle, &handle->depth_image, &handle->depth_image_view, &handle->depth_memory);
+		}
+
+		/* Create framebuffers for the swapchain. */
+		video->handle->swapchain_framebuffers = new VkFramebuffer[video->handle->swapchain_image_count];
+		for (u32 i = 0; i < video->handle->swapchain_image_count; i++) {
+			VkImageView image_attachments[max_attachments];
+			image_attachments[0] = video->handle->swapchain_image_views[i];
+			if (use_depth) {
+				image_attachments[1] = handle->depth_image_view;
+			}
+
+			VkFramebufferCreateInfo fb_info{};
+			fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			fb_info.renderPass = handle->render_pass;
+			fb_info.attachmentCount = attachment_count;
+			fb_info.pAttachments = image_attachments;
+			fb_info.width =  video->handle->swapchain_extent.width;
+			fb_info.height = video->handle->swapchain_extent.height;
+			fb_info.layers = 1;
+
+			if (vkCreateFramebuffer(video->handle->device, &fb_info, null, &video->handle->swapchain_framebuffers[i]) != VK_SUCCESS) {
+				abort_with("Failed to create framebuffer.");
+			}
+		}
+
 	}
 
 	Pipeline::~Pipeline() {
@@ -1214,48 +1254,23 @@ namespace vkr {
 		vkDestroyDescriptorSetLayout(video->handle->device, handle->sampler_desc_set_layout, null);
 
 		delete[] handle->uniforms;
+		delete[] handle->sampler_bindings;
+		delete[] handle->temp_sets;
+
+		if (flags & Flags::depth_test) {
+			vkDestroyImageView(video->handle->device, handle->depth_image_view, null);
+			vmaDestroyImage(video->handle->allocator, handle->depth_image, handle->depth_memory);
+		}
 
 		vkDestroyPipeline(video->handle->device, handle->pipeline, null);
 		vkDestroyPipelineLayout(video->handle->device, handle->pipeline_layout, null);
 		vkDestroyRenderPass(video->handle->device, handle->render_pass, null);
 
-		delete[] handle->sampler_bindings;
-		delete[] handle->temp_sets;
-
 		delete handle;
-	}
-
-	void Pipeline::make_default() {
-		/* Create the depth buffer */
-		new_depth_resources(video->handle);
-
-		/* Create framebuffers for the swapchain. */
-		video->handle->swapchain_framebuffers = new VkFramebuffer[video->handle->swapchain_image_count];
-		for (u32 i = 0; i < video->handle->swapchain_image_count; i++) {
-			VkImageView attachments[] = {
-				video->handle->swapchain_image_views[i],
-				video->handle->depth_image_view
-			};
-
-			VkFramebufferCreateInfo fb_info{};
-			fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			fb_info.renderPass = handle->render_pass;
-			fb_info.attachmentCount = 2;
-			fb_info.pAttachments = attachments;
-			fb_info.width =  video->handle->swapchain_extent.width;
-			fb_info.height = video->handle->swapchain_extent.height;
-			fb_info.layers = 1;
-
-			if (vkCreateFramebuffer(video->handle->device, &fb_info, null, &video->handle->swapchain_framebuffers[i]) != VK_SUCCESS) {
-				abort_with("Failed to create framebuffer.");
-			}
-		}
 	}
 
 	void Pipeline::begin() {
 		video->pipeline = this;
-
-		/* TODO: pass a framebuffer into here? */
 
 		/* Update the uniform buffers. */
 		for (u32 i = 0; i < uniform_count; i++) {

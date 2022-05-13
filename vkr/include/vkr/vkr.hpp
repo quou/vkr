@@ -111,8 +111,12 @@ namespace vkr {
 		};
 
 		enum class Flags {
-			depth_test = 1 << 0
-		};
+			depth_test       = 1 << 0,
+			cull_back_face   = 1 << 1,
+			cull_front_face  = 1 << 2,
+			draw_to_surface  = 1 << 3,  /* Draws to the swapchain framebuffer(s) */
+			draw_headless    = 1 << 4   /* Creates and draws to its own framebuffer. */
+		} flags;
 
 		Pipeline(VideoContext* video, Flags flags, Shader* shader, usize stride,
 			Attribute* attribs, usize attrib_count,
@@ -120,8 +124,6 @@ namespace vkr {
 			SamplerBinding* sampler_bindings = null, usize sampler_binding_count = 0,
 			PushConstantRange* pcranges = null, usize pcrange_count = 0);
 		virtual ~Pipeline();
-
-		void make_default();
 
 		void begin();
 		void end();
@@ -134,6 +136,14 @@ namespace vkr {
 			push_constant(stage, &c, sizeof(T), offset);
 		}
 	};
+
+	inline Pipeline::Flags operator|(Pipeline::Flags a, Pipeline::Flags b) {
+		return static_cast<Pipeline::Flags>(static_cast<i32>(a) | static_cast<i32>(b));
+	}
+
+	inline i32 operator&(Pipeline::Flags a, Pipeline::Flags b) {
+		return static_cast<i32>(a) & static_cast<i32>(b);
+	}
 
 	class VKR_API Buffer {
 	protected:

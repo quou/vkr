@@ -6,7 +6,7 @@
 #include "vkr.hpp"
 
 #define max_frames_in_flight 3
-#define max_bound_samplers 256
+#define max_attachments 2
 
 namespace vkr {
 	struct impl_VideoContext {
@@ -23,21 +23,16 @@ namespace vkr {
 
 		/* Swapchain */
 		VkSwapchainKHR swapchain;
-		
+
 		u32 swapchain_image_count;
 		VkImage* swapchain_images;
 		VkImageView* swapchain_image_views;
-		
+
 		VkFormat swapchain_format;
 		VkExtent2D swapchain_extent;
 
 		/* Framebuffers */
 		VkFramebuffer* swapchain_framebuffers;
-
-		/* Depth buffer. */
-		VkImage depth_image;
-		VmaAllocation depth_memory;
-		VkImageView depth_image_view;
 
 		/* Command buffer */
 		VkCommandPool command_pool;
@@ -95,6 +90,11 @@ namespace vkr {
 		 * vkCmdBindDescriptorSets to avoid re-creating a vector
 		 * every frame or something equally dumb. */
 		VkDescriptorSet* temp_sets;
+
+		/* Depth buffer. */
+		VkImage depth_image;
+		VmaAllocation depth_memory;
+		VkImageView depth_image_view;
 	};
 
 	struct impl_Shader {
