@@ -73,4 +73,8 @@ namespace vkr {
 	v2i App::get_size() const {
 		return size;
 	}
+
+	Framebuffer* App::get_default_framebuffer() const {
+		return video->default_fb;
+	}
 }

@@ -40,6 +40,7 @@ namespace vkr {
 	class App;
 	class Buffer;
 	class IndexBuffer;
+	class Framebuffer;
 	class Pipeline;
 	class Texture;
 	class Shader;

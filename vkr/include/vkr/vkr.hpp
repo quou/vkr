@@ -33,6 +33,7 @@ namespace vkr {
 	struct impl_Shader;
 	struct impl_Texture;
 	struct impl_VideoContext;
+	struct impl_Framebuffer;
 
 	/* To be inherited by client applications to provide custom
 	 * functionality and data. */
@@ -60,6 +61,7 @@ namespace vkr {
 		void run();
 
 		v2i get_size() const;
+		Framebuffer* get_default_framebuffer() const;
 	};
 
 	/* The Pipeline class and its children take care of
@@ -68,6 +70,8 @@ namespace vkr {
 	protected:
 		VideoContext* video;
 		impl_Pipeline* handle;
+
+		Framebuffer* framebuffer;
 
 		usize uniform_count;
 		usize sampler_binding_count;
@@ -120,6 +124,7 @@ namespace vkr {
 
 		Pipeline(VideoContext* video, Flags flags, Shader* shader, usize stride,
 			Attribute* attribs, usize attrib_count,
+			Framebuffer* framebuffer,
 			UniformBuffer* uniforms = null, usize uniform_count = 0,
 			SamplerBinding* sampler_bindings = null, usize sampler_binding_count = 0,
 			PushConstantRange* pcranges = null, usize pcrange_count = 0);
@@ -142,6 +147,36 @@ namespace vkr {
 	}
 
 	inline i32 operator&(Pipeline::Flags a, Pipeline::Flags b) {
+		return static_cast<i32>(a) & static_cast<i32>(b);
+	}
+
+	class VKR_API Framebuffer {
+	private:
+		VideoContext* video;
+		impl_Framebuffer* handle;
+
+		v2i size;
+
+		friend class VideoContext;
+		friend class Pipeline;
+	public:
+		enum class Flags {
+			default_fb = 1 << 0,  /* To be managed by the video context only. */
+			headless   = 1 << 1,  /* Creates a sampler to be sampled from a shader. */
+			depth_test = 1 << 2
+		} flags;
+
+		Framebuffer(VideoContext* video, Flags flags, v2i size);
+		~Framebuffer();
+
+		inline v2i get_size() const { return size; }
+	};
+
+	inline Framebuffer::Flags operator|(Framebuffer::Flags a, Framebuffer::Flags b) {
+		return static_cast<Framebuffer::Flags>(static_cast<i32>(a) | static_cast<i32>(b));
+	}
+
+	inline i32 operator&(Framebuffer::Flags a, Framebuffer::Flags b) {
 		return static_cast<i32>(a) & static_cast<i32>(b);
 	}
 
@@ -201,8 +236,11 @@ namespace vkr {
 
 		usize object_count;
 
+		Framebuffer* default_fb;
+
 		Pipeline* pipeline;
 
+		friend class App;
 		friend class Buffer;
 		friend class IndexBuffer;
 		friend class Pipeline;

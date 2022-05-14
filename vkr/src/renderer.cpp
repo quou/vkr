@@ -60,18 +60,18 @@ namespace vkr {
 		};
 
 		pipeline = new Pipeline(video,
-			Pipeline::Flags::depth_test | Pipeline::Flags::cull_back_face,
+			Pipeline::Flags::draw_to_surface |
+			Pipeline::Flags::depth_test |
+			Pipeline::Flags::cull_back_face,
 			shader,
 			sizeof(Vertex),
 			attribs, 3,
+			app->get_default_framebuffer(),
 			ubuffers, 2,
 			samplers, sampler_binding_count,
 			pc, 1);
 
 		delete[] samplers;
-
-		/* TODO: Make this better. */
-//		pipeline->make_default();
 	}
 
 	Renderer3D::~Renderer3D() {

@@ -31,9 +31,6 @@ namespace vkr {
 		VkFormat swapchain_format;
 		VkExtent2D swapchain_extent;
 
-		/* Framebuffers */
-		VkFramebuffer* swapchain_framebuffers;
-
 		/* Command buffer */
 		VkCommandPool command_pool;
 		VkCommandBuffer command_buffers[max_frames_in_flight];
@@ -73,7 +70,6 @@ namespace vkr {
 	};
 
 	struct impl_Pipeline {
-		VkRenderPass render_pass;
 		VkPipelineLayout pipeline_layout;
 		VkPipeline pipeline;
 
@@ -90,11 +86,40 @@ namespace vkr {
 		 * vkCmdBindDescriptorSets to avoid re-creating a vector
 		 * every frame or something equally dumb. */
 		VkDescriptorSet* temp_sets;
+	};
+
+	struct impl_Framebuffer {
+		VkRenderPass render_pass;
+
+		/* For drawing to the swapchain. */
+		VkFramebuffer* swapchain_framebuffers;
+
+		/* For offscreen rendering. */
+		VkFramebuffer offscreen_framebuffers[max_frames_in_flight];
+		VkImage images[max_frames_in_flight];
+		VkImageView image_views[max_frames_in_flight];
+		VmaAllocation image_memories[max_frames_in_flight];
+		VkSampler samplers[max_frames_in_flight];
+
+		/* Points to either swapchain_framebuffers if this is
+		 * the default framebuffer, or offscreen_framebuffers
+		 * if this is a headless framebuffer. */
+		VkFramebuffer* framebuffers;
 
 		/* Depth buffer. */
 		VkImage depth_image;
 		VmaAllocation depth_memory;
 		VkImageView depth_image_view;
+
+		bool is_headless;
+
+		VkFramebuffer get_current_framebuffer(u32 image_id, u32 current_frame) const {
+			if (is_headless) {
+				return framebuffers[current_frame];
+			}
+
+			return swapchain_framebuffers[image_id];
+		}
 	};
 
 	struct impl_Shader {
