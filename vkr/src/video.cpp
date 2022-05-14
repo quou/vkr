@@ -1235,6 +1235,11 @@ namespace vkr {
 
 		bool use_depth = flags & Flags::depth_test;
 
+		VkFormat format = video->handle->swapchain_format;
+		if (flags & Flags::headless) {
+			format = VK_FORMAT_R8G8B8A8_UNORM;
+		}
+
 		VkAttachmentDescription depth_attachment{};
 		depth_attachment.format = find_depth_format(video->handle);
 		depth_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -1251,7 +1256,7 @@ namespace vkr {
 		depth_attachment_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 		VkAttachmentDescription color_attachment{};
-		color_attachment.format = video->handle->swapchain_format;
+		color_attachment.format = format;
 		color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1335,13 +1340,10 @@ namespace vkr {
 			/* Create images and image views for off-screen rendering. */
 			handle->framebuffers = handle->offscreen_framebuffers;
 			for (u32 i = 0; i < max_frames_in_flight; i++) {
-				/* TODO: Read this from the flags. */
-				auto format = VK_FORMAT_R8G8B8_SRGB;
-
 				new_image(video->handle, size, format, VK_IMAGE_TILING_OPTIMAL,
 					VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					handle->images + i, handle->image_memories + i);
-				new_image_view(video->handle, handle->images[i], format, VK_IMAGE_ASPECT_COLOR_BIT);
+				handle->image_views[i] = new_image_view(video->handle, handle->images[i], format, VK_IMAGE_ASPECT_COLOR_BIT);
 
 				image_attachments[0] = handle->image_views[i];
 
@@ -1362,9 +1364,17 @@ namespace vkr {
 	}
 
 	Framebuffer::~Framebuffer() {
+		video->wait_for_done();
+
 		if (flags & Flags::default_fb) {
 			for (u32 i = 0; i < video->handle->swapchain_image_count; i++) {
 				vkDestroyFramebuffer(video->handle->device, handle->swapchain_framebuffers[i], null);
+			}
+		} else if (flags & Flags::headless) {
+			for (u32 i = 0; i < max_frames_in_flight; i++) {
+				vmaDestroyImage(video->handle->allocator, handle->images[i], handle->image_memories[i]);
+				vkDestroyImageView(video->handle->device, handle->image_views[i], null);
+				vkDestroyFramebuffer(video->handle->device, handle->framebuffers[i], null);
 			}
 		}
 

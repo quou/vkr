@@ -71,10 +71,26 @@ namespace vkr {
 			samplers, sampler_binding_count,
 			pc, 1);
 
+		test_fb = new Framebuffer(video, Framebuffer::Flags::headless | Framebuffer::Flags::depth_test, app->get_size());
+
+		pipeline2 = new Pipeline(video,
+			Pipeline::Flags::draw_to_surface |
+			Pipeline::Flags::depth_test |
+			Pipeline::Flags::cull_back_face,
+			shader,
+			sizeof(Vertex),
+			attribs, 3,
+			test_fb,
+			ubuffers, 2,
+			samplers, sampler_binding_count,
+			pc, 1);
+
 		delete[] samplers;
 	}
 
 	Renderer3D::~Renderer3D() {
+		delete test_fb;
+		delete pipeline2;
 		delete pipeline;
 	}
 
@@ -110,9 +126,26 @@ namespace vkr {
 
 	void Renderer3D::end() {
 		pipeline->end();
+
+		pipeline2->begin();
+
+		for (auto mesh : model->meshes) {
+			u32 samplers[] = {
+				0 /* albedo */
+			};
+
+			pipeline->push_constant(Pipeline::Stage::vertex, v_pc);
+			pipeline->bind_samplers(samplers, Material::get_texture_count());
+			mesh->vb->bind();
+			mesh->ib->draw();
+		}
+
+		pipeline2->end();
 	}
 
 	void Renderer3D::draw(Model3D* model, m4f transform, usize material_id) {
+		this->model = model;
+
 		v_pc.transform = transform;
 		for (auto mesh : model->meshes) {
 			u32 samplers[] = {

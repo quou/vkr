@@ -38,7 +38,12 @@ namespace vkr {
 		} v_pc;
 
 		Pipeline* pipeline;
+		Pipeline* pipeline2;
 		App* app;
+
+		Framebuffer* test_fb;
+
+		Model3D* model;
 	public:
 		struct Material {
 			Texture* albedo;
