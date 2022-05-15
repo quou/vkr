@@ -467,6 +467,27 @@ namespace vkr {
 		return find_supported_format(handle, formats, 3, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 	}
 
+
+	static VkFormat fb_format(impl_VideoContext* handle, Framebuffer::Attachment::Format format) {
+#define fmt(v_) format == Framebuffer::Attachment::Format::v_
+
+		return
+			fmt(depth)   ? find_depth_format(handle) :
+			fmt(red8)    ? VK_FORMAT_R8_UNORM :
+			fmt(rgb8)    ? VK_FORMAT_R8G8B8_UNORM :
+			fmt(rgba8)   ? VK_FORMAT_R8G8B8A8_UNORM :
+			fmt(redf32)  ? VK_FORMAT_R32_SFLOAT :
+			fmt(rgbf32)  ? VK_FORMAT_R32G32B32_SFLOAT :
+			fmt(rgbaf32) ? VK_FORMAT_R32G32B32A32_SFLOAT :
+			fmt(redf16)  ? VK_FORMAT_R16_SFLOAT :
+			fmt(rgbf16)  ? VK_FORMAT_R16G16B16_SFLOAT :
+			fmt(rgbaf16) ? VK_FORMAT_R16G16B16A16_SFLOAT :
+			VK_FORMAT_R8G8B8_UNORM;
+#undef fmt
+	}
+
+
+
 	static bool has_stencil_comp(VkFormat format) {
 		return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
@@ -718,10 +739,12 @@ namespace vkr {
 		Framebuffer::Attachment attachments[] = {
 			{
 				.type = Framebuffer::Attachment::Type::color,
+				.format = Framebuffer::Attachment::Format::rgb8,
 				.samplable = false
 			},
 			{
 				.type = Framebuffer::Attachment::Type::depth,
+				.format = Framebuffer::Attachment::Format::depth,
 				.samplable = false
 			}
 		};
@@ -1249,17 +1272,13 @@ namespace vkr {
 		bool use_depth = false;
 
 		VkFormat color_format = video->handle->swapchain_format;
-		if (flags & Flags::headless) {
-			/* TODO: Take this from the colour attachments */
-			color_format = VK_FORMAT_R8G8B8A8_UNORM;
-		}
 
 		/* Get the index of the first depth attachment.
 		 *
 		 * Framebuffers only support a single depth attachment. */
 		usize depth_index = (usize)-1;
 		for (usize i = 0; i < attachment_count; i++) {
-			if (attachments[i].type == Attachment::Type::depth) {
+			if (depth_index > attachment_count && attachments[i].type == Attachment::Type::depth) {
 				depth_index = i;
 				use_depth = true;
 				break;
@@ -1271,6 +1290,7 @@ namespace vkr {
 		/* Create color attachments */
 		auto ca_descs = new VkAttachmentDescription[attachment_count]();
 		auto ca_refs  = new VkAttachmentReference[attachment_count]();
+		auto color_formats = new VkFormat[attachment_count]();
 		usize color_attachment_count = 0;
 		for (usize i = 0; i < attachment_count; i++) {
 			if (attachments[i].type == Attachment::Type::color) {
@@ -1278,7 +1298,13 @@ namespace vkr {
 
 				auto idx = color_attachment_count++;
 
-				ca_descs[idx].format = color_format;
+				if (flags & Flags::headless) {
+					color_formats[idx] = fb_format(video->handle, color_attachment->format);
+				} else {
+					color_formats[idx] = color_format;
+				}
+
+				ca_descs[idx].format = color_formats[idx];
 				ca_descs[idx].samples = VK_SAMPLE_COUNT_1_BIT;
 				ca_descs[idx].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 				ca_descs[idx].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1416,12 +1442,14 @@ namespace vkr {
 			for (usize i = 0; i < color_attachment_count; i++) {
 				auto attachment = handle->colors + i;
 
+				auto fmt = color_formats[i];
+
 				for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
-					new_image(video->handle, size, color_format, VK_IMAGE_TILING_OPTIMAL,
+					new_image(video->handle, size, fmt, VK_IMAGE_TILING_OPTIMAL,
 						VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 						attachment->images + ii, attachment->image_memories + ii);
 					attachment->image_views[ii] = new_image_view(video->handle, attachment->images[ii],
-						color_format, VK_IMAGE_ASPECT_COLOR_BIT);
+						fmt, VK_IMAGE_ASPECT_COLOR_BIT);
 				}
 			}
 
@@ -1476,6 +1504,7 @@ namespace vkr {
 			delete[] v_attachments;
 		}
 
+		delete[] color_formats;
 		delete[] ca_descs;
 		delete[] ca_refs;
 	}

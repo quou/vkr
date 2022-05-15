@@ -173,6 +173,19 @@ namespace vkr {
 				depth
 			} type;
 
+			enum class Format {
+				depth,
+				red8,
+				rgb8,
+				rgba8,
+				redf32,
+				rgbf32,
+				rgbaf32,
+				redf16,
+				rgbf16,
+				rgbaf16
+			} format;
+
 			bool samplable;
 		};
 

@@ -73,14 +73,20 @@ namespace vkr {
 
 		Framebuffer::Attachment attachments[] = {
 			{
-				.type = Framebuffer::Attachment::Type::depth,
+				.type = Framebuffer::Attachment::Type::color,
+				.format = Framebuffer::Attachment::Format::rgbf16,
 				.samplable = false
-			}
+			},
+			{
+				.type = Framebuffer::Attachment::Type::depth,
+				.format = Framebuffer::Attachment::Format::depth,
+				.samplable = false
+			},
 		};
 
 		test_fb = new Framebuffer(video,
 			Framebuffer::Flags::headless,
-			app->get_size(), attachments, 1);
+			app->get_size(), attachments, 2);
 
 		pipeline2 = new Pipeline(video,
 			Pipeline::Flags::draw_to_surface |
