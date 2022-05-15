@@ -185,8 +185,6 @@ namespace vkr {
 				rgbf16,
 				rgbaf16
 			} format;
-
-			bool samplable;
 		};
 
 		Framebuffer(VideoContext* video, Flags flags, v2i size,

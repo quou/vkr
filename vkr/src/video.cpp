@@ -740,12 +740,10 @@ namespace vkr {
 			{
 				.type = Framebuffer::Attachment::Type::color,
 				.format = Framebuffer::Attachment::Format::rgb8,
-				.samplable = false
 			},
 			{
 				.type = Framebuffer::Attachment::Type::depth,
 				.format = Framebuffer::Attachment::Format::depth,
-				.samplable = false
 			}
 		};
 
@@ -1269,6 +1267,26 @@ namespace vkr {
 
 		handle->is_headless = flags & Flags::headless;
 
+		if (handle->is_headless) {
+			VkSamplerCreateInfo sampler_info{};
+			sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+			sampler_info.magFilter = VK_FILTER_LINEAR;
+			sampler_info.minFilter = VK_FILTER_LINEAR;
+			sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			sampler_info.anisotropyEnable = VK_FALSE;
+			sampler_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+			sampler_info.unnormalizedCoordinates = VK_FALSE;
+			sampler_info.compareEnable = VK_FALSE;
+			sampler_info.compareOp = VK_COMPARE_OP_ALWAYS;
+			sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+			if (vkCreateSampler(video->handle->device, &sampler_info, null, &handle->sampler) != VK_SUCCESS) {
+				abort_with("Failed to create framebuffer sampler.");
+			}
+		}
+
 		bool use_depth = false;
 
 		VkFormat color_format = video->handle->swapchain_format;
@@ -1524,6 +1542,8 @@ namespace vkr {
 
 			delete[] handle->swapchain_framebuffers;
 		} else if (flags & Flags::headless) {
+			vkDestroySampler(video->handle->device, handle->sampler, null);
+
 			if (depth_enable) {
 				for (u32 i = 0; i < max_frames_in_flight; i++) {
 					vkDestroyImageView(video->handle->device, handle->depth.image_views[i], null);

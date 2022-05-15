@@ -93,7 +93,6 @@ namespace vkr {
 		VkImage images[max_frames_in_flight];
 		VkImageView image_views[max_frames_in_flight];
 		VmaAllocation image_memories[max_frames_in_flight];
-		VkSampler samplers[max_frames_in_flight];
 	};
 
 	struct impl_Framebuffer {
@@ -125,6 +124,8 @@ namespace vkr {
 
 		VkClearValue* clear_colors;
 		usize clear_color_count;
+
+		VkSampler sampler;
 
 		VkFramebuffer get_current_framebuffer(u32 image_id, u32 current_frame) const {
 			if (is_headless) {

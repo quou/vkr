@@ -75,12 +75,10 @@ namespace vkr {
 			{
 				.type = Framebuffer::Attachment::Type::color,
 				.format = Framebuffer::Attachment::Format::rgbf16,
-				.samplable = false
 			},
 			{
 				.type = Framebuffer::Attachment::Type::depth,
 				.format = Framebuffer::Attachment::Format::depth,
-				.samplable = false
 			},
 		};
 
