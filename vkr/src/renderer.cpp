@@ -71,7 +71,16 @@ namespace vkr {
 			samplers, sampler_binding_count,
 			pc, 1);
 
-		test_fb = new Framebuffer(video, Framebuffer::Flags::headless | Framebuffer::Flags::depth_test, app->get_size());
+		Framebuffer::Attachment attachments[] = {
+			{
+				.type = Framebuffer::Attachment::Type::depth,
+				.samplable = false
+			}
+		};
+
+		test_fb = new Framebuffer(video,
+			Framebuffer::Flags::headless,
+			app->get_size(), attachments, 1);
 
 		pipeline2 = new Pipeline(video,
 			Pipeline::Flags::draw_to_surface |

@@ -84,7 +84,7 @@ void main() {
 	vec3 normal = normalize(fs_in.normal);
 	vec3 view_dir = normalize(data.camera_pos - fs_in.world_pos);
 
-	vec3 lighting_result = vec3(0.0);
+	vec3 lighting_result = vec3(0.1);
 
 	for (int i = 0; i < data.point_light_count; i++) {
 		lighting_result += compute_point_light(normal, view_dir, data.point_lights[i]);

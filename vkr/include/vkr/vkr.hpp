@@ -155,18 +155,29 @@ namespace vkr {
 		VideoContext* video;
 		impl_Framebuffer* handle;
 
+		bool depth_enable;
+
 		v2i size;
 
 		friend class VideoContext;
 		friend class Pipeline;
 	public:
 		enum class Flags {
-			default_fb = 1 << 0,  /* To be managed by the video context only. */
-			headless   = 1 << 1,  /* Creates a sampler to be sampled from a shader. */
-			depth_test = 1 << 2
+			default_fb    = 1 << 0,  /* To be managed by the video context only. */
+			headless      = 1 << 1,  /* Creates a sampler to be sampled from a shader. */
 		} flags;
 
-		Framebuffer(VideoContext* video, Flags flags, v2i size);
+		struct Attachment {
+			enum class Type {
+				color,
+				depth
+			} type;
+
+			bool samplable;
+		};
+
+		Framebuffer(VideoContext* video, Flags flags, v2i size,
+			Attachment* attachments, usize attachment_count);
 		~Framebuffer();
 
 		inline v2i get_size() const { return size; }

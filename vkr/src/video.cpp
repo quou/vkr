@@ -68,8 +68,7 @@ namespace vkr {
 	static VkSurfaceFormatKHR choose_swap_surface_format(u32 avail_format_count, VkSurfaceFormatKHR* avail_formats) {
 		for (u32 i = 0; i < avail_format_count; i++) {
 			if (
-					avail_formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
-					avail_formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+					avail_formats[i].format == VK_FORMAT_B8G8R8A8_UNORM) {
 				return avail_formats[i];
 			}
 		}
@@ -472,11 +471,16 @@ namespace vkr {
 		return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
 
-	static void new_depth_resources(impl_VideoContext* handle, VkImage* image, VkImageView* view, VmaAllocation* memory) {
+	static void new_depth_resources(impl_VideoContext* handle, VkImage* image, VkImageView* view, VmaAllocation* memory, bool can_sample = false) {
 		VkFormat depth_format = find_depth_format(handle);
 
+		i32 usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		if (can_sample) {
+			usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+		}
+
 		new_image(handle, v2i((i32)handle->swapchain_extent.width, (i32)handle->swapchain_extent.height),
-			depth_format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+			depth_format, VK_IMAGE_TILING_OPTIMAL, usage,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory);
 		*view = new_image_view(handle, *image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
 	}
@@ -711,11 +715,22 @@ namespace vkr {
 			}
 		}
 
+		Framebuffer::Attachment attachments[] = {
+			{
+				.type = Framebuffer::Attachment::Type::color,
+				.samplable = false
+			},
+			{
+				.type = Framebuffer::Attachment::Type::depth,
+				.samplable = false
+			}
+		};
+
 		/* Create the default framebuffer. */
 		default_fb = new Framebuffer(this,
-			Framebuffer::Flags::default_fb |
-			Framebuffer::Flags::depth_test,
-			v2i((i32)extent.width, (i32)extent.height));
+			Framebuffer::Flags::default_fb,
+			v2i((i32)extent.width, (i32)extent.height),
+			attachments, 2);
 	}
 
 	VideoContext::~VideoContext() {
@@ -1180,16 +1195,16 @@ namespace vkr {
 			vmaUnmapMemory(video->handle->allocator, handle->uniforms[i].uniform_buffer_memories[video->current_frame]);
 		}
 
+		VkClearValue clear_colors[2];
+		clear_colors[0].color = {{ 0.1f, 0.1f, 0.1f, 1.0f }};
+		clear_colors[1].depthStencil = { 1.0f, 0 };
+
 		VkRenderPassBeginInfo render_pass_info{};
 		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		render_pass_info.renderPass = framebuffer->handle->render_pass;
 		render_pass_info.framebuffer = framebuffer->handle->get_current_framebuffer(video->image_id, video->current_frame);
 		render_pass_info.renderArea.offset = { 0, 0 };
 		render_pass_info.renderArea.extent = VkExtent2D { (u32)framebuffer->get_size().x, (u32)framebuffer->get_size().y };
-
-		VkClearValue clear_colors[2];
-		clear_colors[0].color = {{ 0.01f, 0.01f, 0.01f, 1.0f }};
-		clear_colors[1].depthStencil = { 1.0f, 0 };
 		render_pass_info.clearValueCount = 2;
 		render_pass_info.pClearValues = clear_colors;
 
@@ -1228,17 +1243,65 @@ namespace vkr {
 			handle->temp_sets, 0, null);
 	}
 
-	Framebuffer::Framebuffer(VideoContext* video, Flags flags, v2i size) : video(video), flags(flags), size(size) {
+	Framebuffer::Framebuffer(VideoContext* video, Flags flags, v2i size, Attachment* attachments, usize attachment_count) :
+		video(video), flags(flags), size(size) {
+
 		handle = new impl_Framebuffer();
 
 		handle->is_headless = flags & Flags::headless;
 
-		bool use_depth = flags & Flags::depth_test;
+		bool use_depth = false;
 
-		VkFormat format = video->handle->swapchain_format;
+		VkFormat color_format = video->handle->swapchain_format;
 		if (flags & Flags::headless) {
-			format = VK_FORMAT_R8G8B8A8_UNORM;
+			/* TODO: Take this from the colour attachments */
+			color_format = VK_FORMAT_R8G8B8A8_UNORM;
 		}
+
+		/* Get the index of the first depth attachment.
+		 *
+		 * Framebuffers only support a single depth attachment. */
+		usize depth_index = (usize)-1;
+		for (usize i = 0; i < attachment_count; i++) {
+			if (attachments[i].type == Attachment::Type::depth) {
+				depth_index = i;
+				use_depth = true;
+				break;
+			}
+		}
+
+		depth_enable = use_depth;
+
+		/* Create color attachments */
+		auto ca_descs = new VkAttachmentDescription[attachment_count]();
+		auto ca_refs  = new VkAttachmentReference[attachment_count]();
+		usize color_attachment_count = 0;
+		for (usize i = 0; i < attachment_count; i++) {
+			if (attachments[i].type == Attachment::Type::color) {
+				auto color_attachment = attachments + i;
+
+				auto idx = color_attachment_count++;
+
+				ca_descs[idx].format = color_format;
+				ca_descs[idx].samples = VK_SAMPLE_COUNT_1_BIT;
+				ca_descs[idx].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+				ca_descs[idx].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+				ca_descs[idx].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+				ca_descs[idx].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+				ca_descs[idx].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+				ca_descs[idx].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+				ca_refs[idx].attachment = i;
+				ca_refs[idx].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			}
+		}
+
+		if (flags & Flags::default_fb) {
+			/* Only one colour attachment is supported on the default framebuffer. */
+			color_attachment_count = 1;
+		}
+
+		handle->color_count = color_attachment_count;
 
 		VkAttachmentDescription depth_attachment{};
 		depth_attachment.format = find_depth_format(video->handle);
@@ -1252,27 +1315,13 @@ namespace vkr {
 		depth_attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 		VkAttachmentReference depth_attachment_ref{};
-		depth_attachment_ref.attachment = 1;
+		depth_attachment_ref.attachment = depth_index;
 		depth_attachment_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-		VkAttachmentDescription color_attachment{};
-		color_attachment.format = format;
-		color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-		color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-		color_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		color_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		color_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		color_attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-		VkAttachmentReference color_attachment_ref{};
-		color_attachment_ref.attachment = 0;
-		color_attachment_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 		VkSubpassDescription subpass{};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		subpass.colorAttachmentCount = 1;
-		subpass.pColorAttachments = &color_attachment_ref;
+		subpass.colorAttachmentCount = color_attachment_count;
+		subpass.pColorAttachments = color_attachment_count > 0 ? ca_refs : null;
 
 		if (use_depth) {
 			subpass.pDepthStencilAttachment = &depth_attachment_ref;
@@ -1281,24 +1330,57 @@ namespace vkr {
 		VkSubpassDependency dep{};
 		dep.srcSubpass = VK_SUBPASS_EXTERNAL;
 		dep.dstSubpass = 0;
-		dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 		dep.srcAccessMask = 0;
-		dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-		dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-		u32 attachment_count = 0;
+	/*
+		VkSubpassDependency deps[2];
+		memset(deps, 0, sizeof(deps));
 
-		VkAttachmentDescription attachments[max_attachments];
-		attachments[attachment_count++] = color_attachment;
+		deps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+		deps[0].dstSubpass = 0;
+		deps[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		deps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		deps[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-		if (use_depth) {
-			attachments[attachment_count++] = depth_attachment;
+		deps[1].srcSubpass = 0;
+		deps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+		deps[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		deps[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		deps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		deps[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		deps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;*/
+
+		/* Combine the depth and color attachments into a single array suitable
+		 * for giving to vkCreateRenderPass. */
+		VkAttachmentDescription* v_attachments;
+		if (use_depth && color_attachment_count > 0) {
+			v_attachments = new VkAttachmentDescription[attachment_count]();
+
+			for (usize i = 0; i < depth_index; i++) {
+				v_attachments[i] = ca_descs[i];
+			}
+
+			v_attachments[depth_index] = depth_attachment;
+
+			for (usize i = depth_index + 1; i < attachment_count; i++) {
+				v_attachments[i] = ca_descs[i - 1];
+			}
+		} else if (use_depth && color_attachment_count == 0) {
+			v_attachments = new VkAttachmentDescription[1]();
+			v_attachments[depth_index] = depth_attachment;
+		} else {
+			v_attachments = ca_descs;
 		}
 
 		VkRenderPassCreateInfo render_pass_info{};
 		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		render_pass_info.attachmentCount = attachment_count;
-		render_pass_info.pAttachments = attachments;
+		render_pass_info.attachmentCount = (u32)attachment_count;
+		render_pass_info.pAttachments = v_attachments;
 		render_pass_info.subpassCount = 1;
 		render_pass_info.pSubpasses = &subpass;
 		render_pass_info.dependencyCount = 1;
@@ -1308,27 +1390,29 @@ namespace vkr {
 			abort_with("Failed to create render pass.");
 		}
 
-		VkImageView image_attachments[max_attachments];
-
-		/* Create the depth buffer */
-		if (use_depth) {
-			new_depth_resources(video->handle, &handle->depth_image, &handle->depth_image_view, &handle->depth_memory);
-			image_attachments[1] = handle->depth_image_view;
-		}
-
 		if (flags & Flags::default_fb) {
 			/* For the swapchain.. */
 			handle->swapchain_framebuffers = new VkFramebuffer[video->handle->swapchain_image_count];
 			handle->framebuffers = handle->swapchain_framebuffers;
+
+			/* The default framebuffer can only have two attachments. */
+			VkImageView image_attachments[2];
+
+			/* Create the depth buffer. */
+			if (use_depth) {
+				new_depth_resources(video->handle, &handle->depth_image, &handle->depth_image_view, &handle->depth_memory);
+				image_attachments[1] = handle->depth_image_view;
+			}
+
 			for (u32 i = 0; i < video->handle->swapchain_image_count; i++) {
 				image_attachments[0] = video->handle->swapchain_image_views[i];
 
 				VkFramebufferCreateInfo fb_info{};
 				fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 				fb_info.renderPass = handle->render_pass;
-				fb_info.attachmentCount = attachment_count;
+				fb_info.attachmentCount = use_depth ? 2 : 1;
 				fb_info.pAttachments = image_attachments;
-				fb_info.width =  size.x;
+				fb_info.width  = size.x;
 				fb_info.height = size.y;
 				fb_info.layers = 1;
 
@@ -1339,13 +1423,49 @@ namespace vkr {
 		} else {
 			/* Create images and image views for off-screen rendering. */
 			handle->framebuffers = handle->offscreen_framebuffers;
-			for (u32 i = 0; i < max_frames_in_flight; i++) {
-				new_image(video->handle, size, format, VK_IMAGE_TILING_OPTIMAL,
-					VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-					handle->images + i, handle->image_memories + i);
-				handle->image_views[i] = new_image_view(video->handle, handle->images[i], format, VK_IMAGE_ASPECT_COLOR_BIT);
 
-				image_attachments[0] = handle->image_views[i];
+			handle->colors = new impl_Attachment[color_attachment_count];
+			for (usize i = 0; i < color_attachment_count; i++) {
+				auto attachment = handle->colors + i;
+
+				for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
+					new_image(video->handle, size, color_format, VK_IMAGE_TILING_OPTIMAL,
+						VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+						attachment->images + ii, attachment->image_memories + ii);
+					attachment->image_views[ii] = new_image_view(video->handle, attachment->images[ii],
+						color_format, VK_IMAGE_ASPECT_COLOR_BIT);
+				}
+			}
+
+			/* Create the depth buffers. */
+			if (use_depth) {
+				for (u32 i = 0; i < max_frames_in_flight; i++) {
+					new_depth_resources(video->handle, &handle->depth.images[i],
+						&handle->depth.image_views[i], &handle->depth.image_memories[i]);
+				}
+			}
+
+			auto image_attachments = new VkImageView[attachment_count];
+
+			/* Create depth buffers and framebuffers, one for each frame in flight. */
+			for (u32 i = 0; i < max_frames_in_flight; i++) {
+				if (use_depth && color_attachment_count > 0) {
+					for (usize ii = 0; ii < depth_index; ii++) {
+						image_attachments[ii] = handle->colors[ii].image_views[i];
+					}
+
+					image_attachments[depth_index] = handle->depth.image_views[i];
+
+					for (usize ii = depth_index + 1; ii < attachment_count; ii++) {
+						image_attachments[ii] = handle->colors[ii - 1].image_views[i];
+					}
+				} else if (use_depth && color_attachment_count == 0) {
+					image_attachments[depth_index] = handle->depth.image_views[i];
+				} else {
+					for (usize ii = 0; ii < attachment_count; ii++) {
+						image_attachments[ii] = handle->colors[ii].image_views[i];
+					}
+				}
 
 				VkFramebufferCreateInfo fb_info{};
 				fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -1360,7 +1480,16 @@ namespace vkr {
 					abort_with("Failed to create framebuffer.");
 				}
 			}
+
+			delete[] image_attachments;
 		}
+
+		if (use_depth) {
+			delete[] v_attachments;
+		}
+
+		delete[] ca_descs;
+		delete[] ca_refs;
 	}
 
 	Framebuffer::~Framebuffer() {
@@ -1370,22 +1499,38 @@ namespace vkr {
 			for (u32 i = 0; i < video->handle->swapchain_image_count; i++) {
 				vkDestroyFramebuffer(video->handle->device, handle->swapchain_framebuffers[i], null);
 			}
+
+			if (depth_enable) {
+				vkDestroyImageView(video->handle->device, handle->depth_image_view, null);
+				vmaDestroyImage(video->handle->allocator, handle->depth_image, handle->depth_memory);
+			}
+
+			delete[] handle->swapchain_framebuffers;
 		} else if (flags & Flags::headless) {
+			if (depth_enable) {
+				for (u32 i = 0; i < max_frames_in_flight; i++) {
+					vkDestroyImageView(video->handle->device, handle->depth.image_views[i], null);
+					vmaDestroyImage(video->handle->allocator, handle->depth.images[i], handle->depth.image_memories[i]);
+				}
+			}
+
+			for (usize i = 0; i < handle->color_count; i++) {
+				auto attachment = handle->colors + i;
+
+				for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
+					vmaDestroyImage(video->handle->allocator, attachment->images[ii], attachment->image_memories[ii]);
+					vkDestroyImageView(video->handle->device, attachment->image_views[ii], null);
+				}
+			}
+
 			for (u32 i = 0; i < max_frames_in_flight; i++) {
-				vmaDestroyImage(video->handle->allocator, handle->images[i], handle->image_memories[i]);
-				vkDestroyImageView(video->handle->device, handle->image_views[i], null);
 				vkDestroyFramebuffer(video->handle->device, handle->framebuffers[i], null);
 			}
-		}
 
-		if (flags & Flags::depth_test) {
-			vkDestroyImageView(video->handle->device, handle->depth_image_view, null);
-			vmaDestroyImage(video->handle->allocator, handle->depth_image, handle->depth_memory);
+			delete[] handle->colors;
 		}
 
 		vkDestroyRenderPass(video->handle->device, handle->render_pass, null);
-
-		delete[] handle->swapchain_framebuffers;
 
 		delete handle;
 	}
@@ -1487,7 +1632,7 @@ namespace vkr {
 		memcpy(remote_data, data, image_size);
 		vmaUnmapMemory(video->handle->allocator, stage_buffer_memory);
 
-		auto format = VK_FORMAT_R8G8B8A8_SRGB;
+		auto format = VK_FORMAT_R8G8B8A8_UNORM;
 
 		new_image(video->handle, size, format, VK_IMAGE_TILING_OPTIMAL,
 			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -1504,7 +1649,7 @@ namespace vkr {
 		VkImageViewCreateInfo view_info{};
 		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		view_info.format = VK_FORMAT_R8G8B8A8_SRGB;
+		view_info.format = format;
 		view_info.image = handle->image;
 		view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		view_info.subresourceRange.baseMipLevel = 0;

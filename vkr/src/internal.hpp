@@ -6,7 +6,6 @@
 #include "vkr.hpp"
 
 #define max_frames_in_flight 3
-#define max_attachments 2
 
 namespace vkr {
 	struct impl_VideoContext {
@@ -88,6 +87,15 @@ namespace vkr {
 		VkDescriptorSet* temp_sets;
 	};
 
+	struct impl_Attachment {
+		Framebuffer::Attachment::Type type;
+
+		VkImage images[max_frames_in_flight];
+		VkImageView image_views[max_frames_in_flight];
+		VmaAllocation image_memories[max_frames_in_flight];
+		VkSampler samplers[max_frames_in_flight];
+	};
+
 	struct impl_Framebuffer {
 		VkRenderPass render_pass;
 
@@ -96,20 +104,22 @@ namespace vkr {
 
 		/* For offscreen rendering. */
 		VkFramebuffer offscreen_framebuffers[max_frames_in_flight];
-		VkImage images[max_frames_in_flight];
-		VkImageView image_views[max_frames_in_flight];
-		VmaAllocation image_memories[max_frames_in_flight];
-		VkSampler samplers[max_frames_in_flight];
 
 		/* Points to either swapchain_framebuffers if this is
 		 * the default framebuffer, or offscreen_framebuffers
 		 * if this is a headless framebuffer. */
 		VkFramebuffer* framebuffers;
 
-		/* Depth buffer. */
+		impl_Attachment* colors;
+		usize color_count;
+		impl_Attachment depth;
+
+		/* Used if this is the default framebuffer. On the default
+		 * framebuffer, the depth buffer can't be sampled and a
+		 * separate one won't be needed for each frame in flight. */
 		VkImage depth_image;
-		VmaAllocation depth_memory;
 		VkImageView depth_image_view;
+		VmaAllocation depth_memory;
 
 		bool is_headless;
 
