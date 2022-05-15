@@ -1008,7 +1008,7 @@ namespace vkr {
 		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		pool_info.poolSizeCount = 2;
 		pool_info.pPoolSizes = pool_sizes;
-		pool_info.maxSets = 
+		pool_info.maxSets =
 			(max_frames_in_flight * uniform_count) +
 			(max_frames_in_flight * sampler_binding_count);
 
@@ -1195,18 +1195,14 @@ namespace vkr {
 			vmaUnmapMemory(video->handle->allocator, handle->uniforms[i].uniform_buffer_memories[video->current_frame]);
 		}
 
-		VkClearValue clear_colors[2];
-		clear_colors[0].color = {{ 0.1f, 0.1f, 0.1f, 1.0f }};
-		clear_colors[1].depthStencil = { 1.0f, 0 };
-
 		VkRenderPassBeginInfo render_pass_info{};
 		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		render_pass_info.renderPass = framebuffer->handle->render_pass;
 		render_pass_info.framebuffer = framebuffer->handle->get_current_framebuffer(video->image_id, video->current_frame);
 		render_pass_info.renderArea.offset = { 0, 0 };
 		render_pass_info.renderArea.extent = VkExtent2D { (u32)framebuffer->get_size().x, (u32)framebuffer->get_size().y };
-		render_pass_info.clearValueCount = 2;
-		render_pass_info.pClearValues = clear_colors;
+		render_pass_info.clearValueCount = framebuffer->handle->clear_color_count;
+		render_pass_info.pClearValues = framebuffer->handle->clear_colors;
 
 		vkCmdBeginRenderPass(video->handle->command_buffers[video->current_frame], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, handle->pipeline);
@@ -1335,46 +1331,38 @@ namespace vkr {
 		dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 		dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-	/*
-		VkSubpassDependency deps[2];
-		memset(deps, 0, sizeof(deps));
-
-		deps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-		deps[0].dstSubpass = 0;
-		deps[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-		deps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		deps[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-		deps[1].srcSubpass = 0;
-		deps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-		deps[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		deps[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-		deps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		deps[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		deps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;*/
-
 		/* Combine the depth and color attachments into a single array suitable
 		 * for giving to vkCreateRenderPass. */
 		VkAttachmentDescription* v_attachments;
+		handle->clear_colors = new VkClearValue[attachment_count]();
 		if (use_depth && color_attachment_count > 0) {
 			v_attachments = new VkAttachmentDescription[attachment_count]();
 
 			for (usize i = 0; i < depth_index; i++) {
 				v_attachments[i] = ca_descs[i];
+				handle->clear_colors[i].color = {{ 0.1f, 0.1f, 0.1f, 1.0f }};
 			}
 
 			v_attachments[depth_index] = depth_attachment;
+			handle->clear_colors[depth_index].depthStencil = { 1.0f, 0 };
 
 			for (usize i = depth_index + 1; i < attachment_count; i++) {
 				v_attachments[i] = ca_descs[i - 1];
+				handle->clear_colors[i].color = {{ 0.1f, 0.1f, 0.1f, 1.0f }};
 			}
+			handle->clear_color_count = attachment_count;
 		} else if (use_depth && color_attachment_count == 0) {
 			v_attachments = new VkAttachmentDescription[1]();
 			v_attachments[depth_index] = depth_attachment;
+			handle->clear_colors[depth_index].depthStencil = { 1.0f, 0 };
+			handle->clear_color_count = 1;
 		} else {
 			v_attachments = ca_descs;
+
+			for (usize i = 0; i < attachment_count; i++) {
+				handle->clear_colors[i].color = {{ 0.1f, 0.1f, 0.1f, 1.0f }};
+			}
+			handle->clear_color_count = attachment_count;
 		}
 
 		VkRenderPassCreateInfo render_pass_info{};
@@ -1529,6 +1517,8 @@ namespace vkr {
 
 			delete[] handle->colors;
 		}
+
+		delete[] handle->clear_colors;
 
 		vkDestroyRenderPass(video->handle->device, handle->render_pass, null);
 

@@ -123,6 +123,9 @@ namespace vkr {
 
 		bool is_headless;
 
+		VkClearValue* clear_colors;
+		usize clear_color_count;
+
 		VkFramebuffer get_current_framebuffer(u32 image_id, u32 current_frame) const {
 			if (is_headless) {
 				return framebuffers[current_frame];
