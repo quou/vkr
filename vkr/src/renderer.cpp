@@ -83,7 +83,7 @@ namespace vkr {
 		};
 
 		test_fb = new Framebuffer(video,
-			Framebuffer::Flags::headless,
+			Framebuffer::Flags::headless | Framebuffer::Flags::fit,
 			app->get_size(), attachments, 2);
 
 		pipeline2 = new Pipeline(video,

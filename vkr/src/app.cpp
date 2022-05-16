@@ -8,6 +8,14 @@ namespace vkr {
 		GLFWwindow* window;
 	};
 
+	static void on_resize(GLFWwindow* window, i32 w, i32 h) {
+		auto app = static_cast<App*>(glfwGetWindowUserPointer(window));
+
+		app->size = v2i(w, h);
+
+		app->video->resize(*app, app->size);
+	}
+
 	App::App(const char* title, v2i size) : handle(null), title(title), size(size) {}
 
 	void App::run() {
@@ -16,7 +24,6 @@ namespace vkr {
 		glfwInit();
 
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 		bool enable_validation_layers = 
 #ifdef DEBUG
@@ -35,6 +42,9 @@ namespace vkr {
 		}
 
 		video = new VideoContext(*this, title, enable_validation_layers, ext_count, exts);
+
+		glfwSetWindowUserPointer(handle->window, this);
+		glfwSetWindowSizeCallback(handle->window, on_resize);
 
 		on_init();
 

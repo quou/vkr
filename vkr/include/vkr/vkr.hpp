@@ -42,14 +42,14 @@ namespace vkr {
 		impl_App* handle;
 
 		const char* title;
-		v2i size;
 
 		bool create_window_surface(const VideoContext& ctx) const;
 
 		friend class VideoContext;
-	protected:
-		VideoContext* video;
 	public:
+		v2i size;
+		VideoContext* video;
+
 		App(const char* title, v2i size);
 
 		virtual void on_init() = 0;
@@ -73,8 +73,7 @@ namespace vkr {
 
 		Framebuffer* framebuffer;
 
-		usize uniform_count;
-		usize sampler_binding_count;
+		bool is_recreating = false;
 
 		friend class IndexBuffer;
 	public:
@@ -127,7 +126,7 @@ namespace vkr {
 			Framebuffer* framebuffer,
 			UniformBuffer* uniforms = null, usize uniform_count = 0,
 			SamplerBinding* sampler_bindings = null, usize sampler_binding_count = 0,
-			PushConstantRange* pcranges = null, usize pcrange_count = 0);
+			PushConstantRange* pcranges = null, usize pcrange_count = 0, bool is_recreating = false);
 		virtual ~Pipeline();
 
 		void begin();
@@ -140,6 +139,22 @@ namespace vkr {
 		void push_constant(Stage stage, const T& c, usize offset = 0) {
 			push_constant(stage, &c, sizeof(T), offset);
 		}
+
+		void recreate();
+
+	private:
+		/* Cache for all of the constructor arguments for re-creating
+		 * the pipeline whenever the window is resized. */
+		Shader* shader;
+		usize stride;
+		Attribute* attribs;
+		usize attrib_count;
+		UniformBuffer* uniforms;
+	       	usize uniform_count;
+		SamplerBinding* sampler_bindings;
+		usize sampler_binding_count;
+		PushConstantRange* pcranges;
+		usize pcrange_count;
 	};
 
 	inline Pipeline::Flags operator|(Pipeline::Flags a, Pipeline::Flags b) {
@@ -159,12 +174,15 @@ namespace vkr {
 
 		v2i size;
 
+		bool is_recreating;
+
 		friend class VideoContext;
 		friend class Pipeline;
 	public:
 		enum class Flags {
-			default_fb    = 1 << 0,  /* To be managed by the video context only. */
-			headless      = 1 << 1,  /* Creates a sampler to be sampled from a shader. */
+			default_fb    = 1 << 0, /* To be managed by the video context only. */
+			headless      = 1 << 1, /* Creates a sampler to be sampled from a shader. */
+			fit           = 1 << 2, /* Fit the framebuffer to the window (Re-create it on window resize). */
 		} flags;
 
 		struct Attachment {
@@ -188,10 +206,15 @@ namespace vkr {
 		};
 
 		Framebuffer(VideoContext* video, Flags flags, v2i size,
-			Attachment* attachments, usize attachment_count);
+			Attachment* attachments, usize attachment_count, bool is_recreating = false);
 		~Framebuffer();
 
 		inline v2i get_size() const { return size; }
+
+		void resize(v2i size);
+	private:
+		Attachment* attachments;
+		usize attachment_count;
 	};
 
 	inline Framebuffer::Flags operator|(Framebuffer::Flags a, Framebuffer::Flags b) {
@@ -267,6 +290,15 @@ namespace vkr {
 		friend class IndexBuffer;
 		friend class Pipeline;
 		friend class VertexBuffer;
+		friend class Framebuffer;
+
+		void init_swapchain(const App& app);
+		void deinit_swapchain();
+
+		/* Stored to iterate over and re-create when the
+		 * window is resized. */
+		std::vector<Framebuffer*> framebuffers;
+		std::vector<Pipeline*> pipelines;
 	public:
 		impl_VideoContext* handle;
 
@@ -278,6 +310,8 @@ namespace vkr {
 
 		void begin();
 		void end();
+
+		void resize(const App& app, v2i new_size);
 	};
 
 	class VKR_API Shader {

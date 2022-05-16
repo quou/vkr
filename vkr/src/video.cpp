@@ -334,7 +334,18 @@ namespace vkr {
 		vkCmdCopyBuffer(command_buffer, src, dst, 1, &copy);
 
 		end_temp_command_buffer(handle, command_buffer);
-	}	
+	}
+
+	template <typename T>
+	static void cpu_copy_buffer(T* src, usize src_count, T** dst, usize* dst_count) {
+		*dst_count = src_count;
+
+		*dst = new T[src_count]();
+
+		for (usize i = 0; i < src_count; i++) {
+			(*dst)[i] = src[i];
+		}
+	}
 
 	static void new_image(impl_VideoContext* handle, v2i size, VkFormat format,
 		VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags props,
@@ -527,7 +538,7 @@ namespace vkr {
 		if (vmaCreateBuffer(handle->allocator, &buffer_info, &alloc_info, buffer, buffer_memory, null) != VK_SUCCESS) {
 			abort_with("Failed to create buffer.");
 		}
-	}	
+	}
 
 	VideoContext::VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions) : current_frame(0) {
 		handle = new impl_VideoContext();
@@ -633,6 +644,95 @@ namespace vkr {
 
 		vmaCreateAllocator(&allocator_info, &handle->allocator);
 
+		init_swapchain(app);
+
+		/* Create the command pool. */
+		VkCommandPoolCreateInfo pool_info{};
+		pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		pool_info.queueFamilyIndex = qfs.graphics.value();
+
+		if (vkCreateCommandPool(handle->device, &pool_info, null, &handle->command_pool) != VK_SUCCESS) {
+			abort_with("Failed to create command pool.");
+		}
+
+		/* Create the command buffers. */
+		VkCommandBufferAllocateInfo cb_alloc_info{};
+		cb_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		cb_alloc_info.commandPool = handle->command_pool;
+		cb_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		cb_alloc_info.commandBufferCount = max_frames_in_flight;
+
+		if (vkAllocateCommandBuffers(handle->device, &cb_alloc_info, handle->command_buffers) != VK_SUCCESS) {
+			abort_with("Failed to allocate command buffers.");
+		}
+
+		/* Create the synchronisation objects. */
+		VkSemaphoreCreateInfo semaphore_info{};
+		semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+		VkFenceCreateInfo fence_info{};
+		fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+		for (u32 i = 0; i < max_frames_in_flight; i++) {
+			if (vkCreateSemaphore(handle->device, &semaphore_info, null, &handle->image_avail_semaphores[i])   != VK_SUCCESS ||
+				vkCreateSemaphore(handle->device, &semaphore_info, null, &handle->render_finish_semaphores[i]) != VK_SUCCESS ||
+				vkCreateFence(handle->device, &fence_info, null, &handle->in_flight_fences[i])) {
+				abort_with("Failed to create synchronisation objects.");
+			}
+		}
+
+		Framebuffer::Attachment attachments[] = {
+			{
+				.type = Framebuffer::Attachment::Type::color,
+				.format = Framebuffer::Attachment::Format::rgb8,
+			},
+			{
+				.type = Framebuffer::Attachment::Type::depth,
+				.format = Framebuffer::Attachment::Format::depth,
+			}
+		};
+
+		/* Create the default framebuffer. */
+		default_fb = new Framebuffer(this,
+			Framebuffer::Flags::default_fb | Framebuffer::Flags::fit,
+			app.get_size(),
+			attachments, 2);
+	}
+
+	VideoContext::~VideoContext() {
+		for (u32 i = 0; i < max_frames_in_flight; i++) {
+			vkDestroySemaphore(handle->device, handle->image_avail_semaphores[i], null);
+			vkDestroySemaphore(handle->device, handle->render_finish_semaphores[i], null);
+			vkDestroyFence(handle->device, handle->in_flight_fences[i], null);
+		}
+
+		vkDestroyCommandPool(handle->device, handle->command_pool, null);
+
+		delete default_fb;
+
+		for (u32 i = 0; i < handle->swapchain_image_count; i++) {
+			vkDestroyImageView(handle->device, handle->swapchain_image_views[i], null);
+		}
+
+		vkDestroySwapchainKHR(handle->device, handle->swapchain, null);
+
+		vmaDestroyAllocator(handle->allocator);
+
+		vkDestroyDevice(handle->device, null);
+		vkDestroySurfaceKHR(handle->instance, handle->surface, null);
+		vkDestroyInstance(handle->instance, null);
+
+		delete[] handle->swapchain_images;
+		delete[] handle->swapchain_image_views;
+
+		delete handle;
+	}
+
+	void VideoContext::init_swapchain(const App& app) {
+		auto qfs = get_queue_families(handle->pdevice, handle);
+
 		/* Create the swap chain. */
 		SwapChainCapabilities scc = get_swap_chain_capabilities(handle, handle->pdevice);
 		VkSurfaceFormatKHR surface_format = choose_swap_surface_format(scc.format_count, scc.formats);
@@ -699,88 +799,17 @@ namespace vkr {
 				handle->swapchain_format, VK_IMAGE_ASPECT_COLOR_BIT);
 		}
 
-		/* Create the command pool. */
-		VkCommandPoolCreateInfo pool_info{};
-		pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-		pool_info.queueFamilyIndex = qfs.graphics.value();
-
-		if (vkCreateCommandPool(handle->device, &pool_info, null, &handle->command_pool) != VK_SUCCESS) {
-			abort_with("Failed to create command pool.");
-		}
-
-		/* Create the command buffers. */
-		VkCommandBufferAllocateInfo cb_alloc_info{};
-		cb_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		cb_alloc_info.commandPool = handle->command_pool;
-		cb_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		cb_alloc_info.commandBufferCount = max_frames_in_flight;
-
-		if (vkAllocateCommandBuffers(handle->device, &cb_alloc_info, handle->command_buffers) != VK_SUCCESS) {
-			abort_with("Failed to allocate command buffers.");
-		}
-
-		/* Create the synchronisation objects. */
-		VkSemaphoreCreateInfo semaphore_info{};
-		semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-		VkFenceCreateInfo fence_info{};
-		fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-		fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-		for (u32 i = 0; i < max_frames_in_flight; i++) {
-			if (vkCreateSemaphore(handle->device, &semaphore_info, null, &handle->image_avail_semaphores[i])   != VK_SUCCESS ||
-				vkCreateSemaphore(handle->device, &semaphore_info, null, &handle->render_finish_semaphores[i]) != VK_SUCCESS ||
-				vkCreateFence(handle->device, &fence_info, null, &handle->in_flight_fences[i])) {
-				abort_with("Failed to create synchronisation objects.");
-			}
-		}
-
-		Framebuffer::Attachment attachments[] = {
-			{
-				.type = Framebuffer::Attachment::Type::color,
-				.format = Framebuffer::Attachment::Format::rgb8,
-			},
-			{
-				.type = Framebuffer::Attachment::Type::depth,
-				.format = Framebuffer::Attachment::Format::depth,
-			}
-		};
-
-		/* Create the default framebuffer. */
-		default_fb = new Framebuffer(this,
-			Framebuffer::Flags::default_fb,
-			v2i((i32)extent.width, (i32)extent.height),
-			attachments, 2);
 	}
 
-	VideoContext::~VideoContext() {
-		for (u32 i = 0; i < max_frames_in_flight; i++) {
-			vkDestroySemaphore(handle->device, handle->image_avail_semaphores[i], null);
-			vkDestroySemaphore(handle->device, handle->render_finish_semaphores[i], null);
-			vkDestroyFence(handle->device, handle->in_flight_fences[i], null);
-		}
-
-		vkDestroyCommandPool(handle->device, handle->command_pool, null);
-
-		delete default_fb;
-
+	void VideoContext::deinit_swapchain() {
 		for (u32 i = 0; i < handle->swapchain_image_count; i++) {
 			vkDestroyImageView(handle->device, handle->swapchain_image_views[i], null);
 		}
 
 		vkDestroySwapchainKHR(handle->device, handle->swapchain, null);
 
-		vmaDestroyAllocator(handle->allocator);
-
-		vkDestroyDevice(handle->device, null);
-		vkDestroySurfaceKHR(handle->instance, handle->surface, null);
-		vkDestroyInstance(handle->instance, null);
-
 		delete[] handle->swapchain_images;
 		delete[] handle->swapchain_image_views;
-
-		delete handle;
 	}
 
 	void VideoContext::begin() {
@@ -849,15 +878,43 @@ namespace vkr {
 		vkDeviceWaitIdle(handle->device);
 	}
 
+	void VideoContext::resize(const App& app, v2i size) {
+		wait_for_done();
+
+		deinit_swapchain();
+
+		init_swapchain(app);
+
+		for (auto fb : framebuffers) {
+			if (fb->flags & Framebuffer::Flags::fit) {
+				fb->resize(size);
+			}
+		}
+
+		for (auto pip : pipelines) {
+			pip->recreate();
+		}
+	}
+
 	Pipeline::Pipeline(VideoContext* video, Flags flags, Shader* shader, usize stride,
 			Attribute* attribs, usize attrib_count,
 			Framebuffer* framebuffer,
 			UniformBuffer* uniforms, usize uniform_count,
 			SamplerBinding* sampler_bindings, usize sampler_binding_count,
-			PushConstantRange* pcranges, usize pcrange_count) :
+			PushConstantRange* pcranges, usize pcrange_count, bool is_recreating) : is_recreating(is_recreating),
 			video(video), uniform_count(uniform_count), sampler_binding_count(sampler_binding_count),
-			flags(flags), framebuffer(framebuffer) {
+			flags(flags), framebuffer(framebuffer), stride(stride) {
 		handle = new impl_Pipeline();
+
+		if (!is_recreating) {
+			this->shader = shader;
+			cpu_copy_buffer(attribs, attrib_count, &this->attribs, &this->attrib_count);
+			cpu_copy_buffer(uniforms, uniform_count, &this->uniforms, &this->uniform_count);
+			cpu_copy_buffer(sampler_bindings, sampler_binding_count, &this->sampler_bindings, &sampler_binding_count);
+			cpu_copy_buffer(pcranges, pcrange_count, &this->pcranges, &this->pcrange_count);
+
+			video->pipelines.push_back(this);
+		}
 
 		VkPipelineShaderStageCreateInfo v_stage_info{};
 		v_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1182,6 +1239,13 @@ namespace vkr {
 	Pipeline::~Pipeline() {
 		video->wait_for_done();
 
+		if (!is_recreating) {
+			delete[] attribs;
+			delete[] uniforms;
+			delete[] sampler_bindings;
+			delete[] pcranges;
+		}
+
 		for (u32 i = 0; i < uniform_count; i++) {
 			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
 				vmaDestroyBuffer(video->handle->allocator,
@@ -1260,8 +1324,26 @@ namespace vkr {
 			handle->temp_sets, 0, null);
 	}
 
-	Framebuffer::Framebuffer(VideoContext* video, Flags flags, v2i size, Attachment* attachments, usize attachment_count) :
-		video(video), flags(flags), size(size) {
+	void Pipeline::recreate() {
+		is_recreating = true;
+
+		/* The C++ Gods hate me. The C# Gods hate me even more. */
+		this->~Pipeline();	
+		new(this) Pipeline(video, flags, shader, stride,
+			attribs, attrib_count, framebuffer, uniforms, uniform_count,
+			sampler_bindings, sampler_binding_count, pcranges, pcrange_count, true);
+
+		is_recreating = false;
+	}
+
+	Framebuffer::Framebuffer(VideoContext* video, Flags flags, v2i size, Attachment* attachments, usize attachment_count, bool is_recreating) :
+		is_recreating(is_recreating), video(video), flags(flags), size(size) {
+
+		if (!is_recreating) {
+			cpu_copy_buffer(attachments, attachment_count, &this->attachments, &this->attachment_count);
+
+			video->framebuffers.push_back(this);
+		}
 
 		handle = new impl_Framebuffer();
 
@@ -1530,6 +1612,10 @@ namespace vkr {
 	Framebuffer::~Framebuffer() {
 		video->wait_for_done();
 
+		if (!is_recreating) {
+			delete[] attachments;
+		}
+
 		if (flags & Flags::default_fb) {
 			for (u32 i = 0; i < video->handle->swapchain_image_count; i++) {
 				vkDestroyFramebuffer(video->handle->device, handle->swapchain_framebuffers[i], null);
@@ -1572,6 +1658,16 @@ namespace vkr {
 		vkDestroyRenderPass(video->handle->device, handle->render_pass, null);
 
 		delete handle;
+	}
+
+	void Framebuffer::resize(v2i size) {
+		is_recreating = true;
+
+		this->~Framebuffer();
+		new(this) Framebuffer(video, flags, size, attachments, attachment_count, true);
+
+		is_recreating = false;
+
 	}
 
 	Buffer::Buffer(VideoContext* video) : video(video) {
