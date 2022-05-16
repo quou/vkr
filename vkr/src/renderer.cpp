@@ -74,7 +74,7 @@ namespace vkr {
 		Framebuffer::Attachment attachments[] = {
 			{
 				.type = Framebuffer::Attachment::Type::color,
-				.format = Framebuffer::Attachment::Format::rgbf16,
+				.format = Framebuffer::Attachment::Format::rgbaf16,
 			},
 			{
 				.type = Framebuffer::Attachment::Type::depth,

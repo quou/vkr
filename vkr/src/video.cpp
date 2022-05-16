@@ -94,14 +94,10 @@ namespace vkr {
 	}
 
 	static VkExtent2D choose_swap_extent(const App& app, const VkSurfaceCapabilitiesKHR& capabilities) {
-		if (capabilities.currentExtent.width != UINT32_MAX && capabilities.currentExtent.height != UINT32_MAX) {
-			return capabilities.currentExtent;
-		}
-
 		v2i size = app.get_size();
 
 		VkExtent2D extent = {
-			(u32)(size.x), (u32)size.y
+			(u32)size.x, (u32)size.y
 		};
 
 		extent.width  = std::clamp(extent.width,  capabilities.minImageExtent.width,  capabilities.maxImageExtent.width);
@@ -540,7 +536,7 @@ namespace vkr {
 		}
 	}
 
-	VideoContext::VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions) : current_frame(0) {
+	VideoContext::VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions) : current_frame(0), app(app), want_recreate(false) {
 		handle = new impl_VideoContext();
 
 		if (enable_validation_layers && !validation_layers_supported()) {
@@ -644,7 +640,7 @@ namespace vkr {
 
 		vmaCreateAllocator(&allocator_info, &handle->allocator);
 
-		init_swapchain(app);
+		init_swapchain();
 
 		/* Create the command pool. */
 		VkCommandPoolCreateInfo pool_info{};
@@ -730,7 +726,7 @@ namespace vkr {
 		delete handle;
 	}
 
-	void VideoContext::init_swapchain(const App& app) {
+	void VideoContext::init_swapchain() {
 		auto qfs = get_queue_families(handle->pdevice, handle);
 
 		/* Create the swap chain. */
@@ -814,12 +810,22 @@ namespace vkr {
 
 	void VideoContext::begin() {
 		object_count = 0;
+		skip_frame = false;
 
 		vkWaitForFences(handle->device, 1, &handle->in_flight_fences[current_frame], VK_TRUE, UINT64_MAX);
-		vkResetFences(handle->device, 1, &handle->in_flight_fences[current_frame]);
 
-		vkAcquireNextImageKHR(handle->device, handle->swapchain, UINT64_MAX,
+		auto r = vkAcquireNextImageKHR(handle->device, handle->swapchain, UINT64_MAX,
 			handle->image_avail_semaphores[current_frame], VK_NULL_HANDLE, &image_id);
+		if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR || want_recreate) {
+			skip_frame = true;
+			want_recreate = false;
+			resize(app.get_size());
+			return;
+		} else if (r != VK_SUCCESS) {
+			abort_with("Failed to acquire swapchain image.");
+		}
+
+		vkResetFences(handle->device, 1, &handle->in_flight_fences[current_frame]);
 
 		vkResetCommandBuffer(handle->command_buffers[current_frame], 0);
 
@@ -833,6 +839,8 @@ namespace vkr {
 	}
 
 	void VideoContext::end() {
+		if (skip_frame) { return; }
+
 		if (vkEndCommandBuffer(handle->command_buffers[current_frame]) != VK_SUCCESS) {
 			warning("Failed to end the command buffer");
 			return;
@@ -878,16 +886,16 @@ namespace vkr {
 		vkDeviceWaitIdle(handle->device);
 	}
 
-	void VideoContext::resize(const App& app, v2i size) {
+	void VideoContext::resize(v2i new_size) {
 		wait_for_done();
 
 		deinit_swapchain();
 
-		init_swapchain(app);
+		init_swapchain();
 
 		for (auto fb : framebuffers) {
 			if (fb->flags & Framebuffer::Flags::fit) {
-				fb->resize(size);
+				fb->resize(new_size);
 			}
 		}
 
@@ -1269,6 +1277,8 @@ namespace vkr {
 	}
 
 	void Pipeline::begin() {
+		if (video->skip_frame) { return; }
+
 		video->pipeline = this;
 
 		/* Update the uniform buffers. */
@@ -1298,10 +1308,13 @@ namespace vkr {
 	}
 
 	void Pipeline::end() {
+		if (video->skip_frame) { return; }
 		vkCmdEndRenderPass(video->handle->command_buffers[video->current_frame]);
 	}
 
 	void Pipeline::push_constant(Stage stage, const void* ptr, usize size, usize offset) {
+		if (video->skip_frame) { return; }
+
 #ifdef DEBUG
 		if (size > max_push_const_size) {
 			abort_with("Push constant too big. Use a uniform buffer instead.");
@@ -1315,6 +1328,8 @@ namespace vkr {
 	}
 
 	void Pipeline::bind_samplers(u32* indices, usize index_count) {
+		if (video->skip_frame) { return; }
+
 		for (usize i = 0; i < index_count; i++) {
 			handle->temp_sets[i] = handle->sampler_bindings[indices[i]].descriptor_sets[video->current_frame];
 		}
@@ -1660,11 +1675,11 @@ namespace vkr {
 		delete handle;
 	}
 
-	void Framebuffer::resize(v2i size) {
+	void Framebuffer::resize(v2i new_size) {
 		is_recreating = true;
 
 		this->~Framebuffer();
-		new(this) Framebuffer(video, flags, size, attachments, attachment_count, true);
+		new(this) Framebuffer(video, flags, new_size, attachments, attachment_count, true);
 
 		is_recreating = false;
 
@@ -1706,6 +1721,8 @@ namespace vkr {
 	}
 
 	void VertexBuffer::bind() {
+		if (video->skip_frame) { return; }
+
 		VkBuffer vbs[] = { handle->buffer };
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(video->handle->command_buffers[video->current_frame], 0, 1, vbs, offsets);
@@ -1741,6 +1758,8 @@ namespace vkr {
 	}
 
 	void IndexBuffer::draw() {
+		if (video->skip_frame) { return; }
+
 		vkCmdBindIndexBuffer(video->handle->command_buffers[video->current_frame], handle->buffer, 0, VK_INDEX_TYPE_UINT16);
 		vkCmdDrawIndexed(video->handle->command_buffers[video->current_frame], count, 1, 0, 0, 0);
 

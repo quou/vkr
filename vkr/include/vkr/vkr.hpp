@@ -292,8 +292,12 @@ namespace vkr {
 		friend class VertexBuffer;
 		friend class Framebuffer;
 
-		void init_swapchain(const App& app);
+		void init_swapchain();
 		void deinit_swapchain();
+
+		const App& app;
+
+		bool skip_frame;
 
 		/* Stored to iterate over and re-create when the
 		 * window is resized. */
@@ -301,6 +305,7 @@ namespace vkr {
 		std::vector<Pipeline*> pipelines;
 	public:
 		impl_VideoContext* handle;
+		bool want_recreate;
 
 		VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions);
 		~VideoContext();
@@ -311,7 +316,7 @@ namespace vkr {
 		void begin();
 		void end();
 
-		void resize(const App& app, v2i new_size);
+		void resize(v2i new_size);
 	};
 
 	class VKR_API Shader {

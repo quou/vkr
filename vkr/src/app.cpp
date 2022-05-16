@@ -8,12 +8,12 @@ namespace vkr {
 		GLFWwindow* window;
 	};
 
-	static void on_resize(GLFWwindow* window, i32 w, i32 h) {
-		auto app = static_cast<App*>(glfwGetWindowUserPointer(window));
+	static void on_framebuffer_resize(GLFWwindow* window, i32 w, i32 h) {
+		auto app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
 
 		app->size = v2i(w, h);
 
-		app->video->resize(*app, app->size);
+		app->video->want_recreate = true;
 	}
 
 	App::App(const char* title, v2i size) : handle(null), title(title), size(size) {}
@@ -44,7 +44,7 @@ namespace vkr {
 		video = new VideoContext(*this, title, enable_validation_layers, ext_count, exts);
 
 		glfwSetWindowUserPointer(handle->window, this);
-		glfwSetWindowSizeCallback(handle->window, on_resize);
+		glfwSetFramebufferSizeCallback(handle->window, on_framebuffer_resize);
 
 		on_init();
 
