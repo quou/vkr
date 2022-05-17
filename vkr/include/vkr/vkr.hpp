@@ -72,6 +72,7 @@ namespace vkr {
 		bool depth_enable;
 
 		v2i size;
+		f32 scale;
 
 		bool is_recreating;
 
@@ -104,11 +105,13 @@ namespace vkr {
 			} format;
 		};
 
+		/* The scale parameter allows for supersampling. */
 		Framebuffer(VideoContext* video, Flags flags, v2i size,
-			Attachment* attachments, usize attachment_count, bool is_recreating = false);
+			Attachment* attachments, usize attachment_count, f32 scale = 1.0f, bool is_recreating = false);
 		~Framebuffer();
 
 		inline v2i get_size() const { return size; }
+		inline v2i get_scaled_size() const { return v2i((i32)((f32)size.x) * scale, (i32)((f32)size.y) * scale); }
 
 		void resize(v2i size);
 	private:

@@ -960,17 +960,19 @@ namespace vkr {
 		input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		input_assembly.primitiveRestartEnable = VK_FALSE;
 
+		auto scaled_fb_size = framebuffer->get_scaled_size();
+
 		VkViewport viewport{};
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
-		viewport.width  = framebuffer->get_size().x;
-		viewport.height = framebuffer->get_size().y;
+		viewport.width  = scaled_fb_size.x;
+		viewport.height = scaled_fb_size.y;
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 
 		VkRect2D scissor{};
 		scissor.offset = { 0, 0 };
-		scissor.extent = video->handle->swapchain_extent;
+		scissor.extent = { (u32)scaled_fb_size.x, (u32)scaled_fb_size.y };
 
 		VkPipelineViewportStateCreateInfo viewport_state{};
 		viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -1310,7 +1312,7 @@ namespace vkr {
 		render_pass_info.renderPass = framebuffer->handle->render_pass;
 		render_pass_info.framebuffer = framebuffer->handle->get_current_framebuffer(video->image_id, video->current_frame);
 		render_pass_info.renderArea.offset = { 0, 0 };
-		render_pass_info.renderArea.extent = VkExtent2D { (u32)framebuffer->get_size().x, (u32)framebuffer->get_size().y };
+		render_pass_info.renderArea.extent = VkExtent2D { (u32)framebuffer->get_scaled_size().x, (u32)framebuffer->get_scaled_size().y };
 		render_pass_info.clearValueCount = framebuffer->handle->clear_color_count;
 		render_pass_info.pClearValues = framebuffer->handle->clear_colors;
 
@@ -1366,8 +1368,8 @@ namespace vkr {
 		is_recreating = false;
 	}
 
-	Framebuffer::Framebuffer(VideoContext* video, Flags flags, v2i size, Attachment* attachments, usize attachment_count, bool is_recreating) :
-		is_recreating(is_recreating), video(video), flags(flags), size(size) {
+	Framebuffer::Framebuffer(VideoContext* video, Flags flags, v2i size, Attachment* attachments, usize attachment_count, f32 scale, bool is_recreating) :
+		is_recreating(is_recreating), video(video), flags(flags), size(size), scale(scale) {
 
 		if (!is_recreating) {
 			cpu_copy_buffer(attachments, attachment_count, &this->attachments, &this->attachment_count);
@@ -1580,7 +1582,8 @@ namespace vkr {
 				auto fmt = color_formats[i];
 
 				for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
-					new_image(video->handle, size, fmt, VK_IMAGE_TILING_OPTIMAL,
+					new_image(video->handle, v2i((i32)((f32)size.x * scale), (i32)((f32)size.y * scale)),
+						fmt, VK_IMAGE_TILING_OPTIMAL,
 						VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 						attachment->images + ii, attachment->image_memories + ii);
@@ -1593,7 +1596,7 @@ namespace vkr {
 			if (use_depth) {
 				for (u32 i = 0; i < max_frames_in_flight; i++) {
 					new_depth_resources(video->handle, &handle->depth.images[i],
-						&handle->depth.image_views[i], &handle->depth.image_memories[i], size);
+						&handle->depth.image_views[i], &handle->depth.image_memories[i], size * scale);
 				}
 			}
 
@@ -1624,8 +1627,8 @@ namespace vkr {
 				fb_info.renderPass = handle->render_pass;
 				fb_info.attachmentCount = attachment_count;
 				fb_info.pAttachments = image_attachments;
-				fb_info.width =  size.x;
-				fb_info.height = size.y;
+				fb_info.width =  (u32)((f32)size.x * scale);
+				fb_info.height = (u32)((f32)size.y * scale);
 				fb_info.layers = 1;
 
 				if (vkCreateFramebuffer(video->handle->device, &fb_info, null, handle->framebuffers + i) != VK_SUCCESS) {
@@ -1701,7 +1704,7 @@ namespace vkr {
 
 		/* [Evil laugher] */
 		this->~Framebuffer();
-		new(this) Framebuffer(video, flags, new_size, attachments, attachment_count, true);
+		new(this) Framebuffer(video, flags, new_size, attachments, attachment_count, scale, true);
 
 		is_recreating = false;
 

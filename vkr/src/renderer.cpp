@@ -18,7 +18,7 @@ namespace vkr {
 
 		scene_fb = new Framebuffer(video,
 			Framebuffer::Flags::headless | Framebuffer::Flags::fit,
-			app->get_size(), attachments, 2);
+			app->get_size(), attachments, 2, 2.0f);
 
 		Pipeline::Attribute attribs[] = {
 			{ /* vec3 position. */
