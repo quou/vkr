@@ -53,8 +53,9 @@ namespace vkr {
 	public:
 		struct Material {
 			Texture* albedo;
+			Texture* normal;
 
-			static inline usize get_texture_count() { return 1; }
+			static inline usize get_texture_count() { return 2; }
 		};
 
 		struct Light {
@@ -92,6 +93,8 @@ namespace vkr {
 			v3f position;
 			v2f uv;
 			v3f normal;
+			v3f tangent;
+			v3f bitangent;
 		};
 	};
 

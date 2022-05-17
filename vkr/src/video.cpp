@@ -1055,10 +1055,10 @@ namespace vkr {
 			if (dup) { continue; }
 
 			u32 idx = sampler_count++;
-			s_layout_bindings[idx].binding = sampler_bindings[idx].binding;
+			s_layout_bindings[idx].binding = sampler_bindings[i].binding;
 			s_layout_bindings[idx].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			s_layout_bindings[idx].descriptorCount = 1;
-			s_layout_bindings[idx].stageFlags = sampler_bindings[idx].stage == Stage::vertex ?
+			s_layout_bindings[idx].stageFlags = sampler_bindings[i].stage == Stage::vertex ?
 				VK_SHADER_STAGE_VERTEX_BIT :
 				VK_SHADER_STAGE_FRAGMENT_BIT;
 			s_layout_bindings[idx].pImmutableSamplers = null;
@@ -1090,7 +1090,7 @@ namespace vkr {
 			},
 			{
 				.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.descriptorCount = max_frames_in_flight * (u32)sampler_binding_count
+				.descriptorCount = max_frames_in_flight * (u32)sampler_binding_count * 10
 			}
 		};	
 

@@ -18,7 +18,7 @@ namespace vkr {
 
 		scene_fb = new Framebuffer(video,
 			Framebuffer::Flags::headless | Framebuffer::Flags::fit,
-			app->get_size(), attachments, 2, 2.0f);
+			app->get_size(), attachments, 2);
 
 		Pipeline::Attribute attribs[] = {
 			{ /* vec3 position. */
@@ -34,6 +34,16 @@ namespace vkr {
 			{ /* vec3 normal. */
 				.location = 2,
 				.offset   = offsetof(Vertex, normal),
+				.type     = Pipeline::Attribute::Type::float3
+			},
+			{ /* vec3 tangent. */
+				.location = 3,
+				.offset   = offsetof(Vertex, tangent),
+				.type     = Pipeline::Attribute::Type::float3
+			},
+			{ /* vec3 bitangnet. */
+				.location = 4,
+				.offset   = offsetof(Vertex, bitangent),
 				.type     = Pipeline::Attribute::Type::float3
 			},
 		};
@@ -67,14 +77,21 @@ namespace vkr {
 		usize sampler_binding_count = material_count * Material::get_texture_count();
 		auto samplers = new Pipeline::SamplerBinding[sampler_binding_count];
 
-		for (usize i = 0; i < material_count; i += Material::get_texture_count()) {
-			Pipeline::SamplerBinding* albedo_binding = samplers + i;
+		for (usize i = 0; i < sampler_binding_count; i += Material::get_texture_count()) {
+			auto albedo_binding = samplers + i;
+			auto normal_binding = samplers + i + 1;
 
 			albedo_binding->name = "albedo";
 			albedo_binding->binding = 0;
 			albedo_binding->type = Pipeline::SamplerBinding::Type::texture;
 			albedo_binding->object = materials[i].albedo;
 			albedo_binding->stage = Pipeline::Stage::fragment;
+
+			normal_binding->name = "normal";
+			normal_binding->binding = 1;
+			normal_binding->type = Pipeline::SamplerBinding::Type::texture;
+			normal_binding->object = materials[i].normal;
+			normal_binding->stage = Pipeline::Stage::fragment;
 		};
 
 		scene_pip = new Pipeline(video,
@@ -82,11 +99,13 @@ namespace vkr {
 			Pipeline::Flags::cull_back_face,
 			shaders.lit,
 			sizeof(Vertex),
-			attribs, 3,
+			attribs, 5,
 			scene_fb,
 			ubuffers, 2,
 			samplers, sampler_binding_count,
 			pc, 1);
+
+		abort_with("hi");
 
 		Pipeline::Attribute post_attribs[] = {
 			{ /* vec2 position. */
@@ -244,6 +263,44 @@ namespace vkr {
 				indices[index_count++] = vert_count;
 				vert_count++;
 			}
+		}
+
+		for (u32 i = 0; i < index_count; i += 3) {
+			v3f pos1 = verts[indices[i + 0]].position;
+			v3f pos2 = verts[indices[i + 1]].position;
+			v3f pos3 = verts[indices[i + 2]].position;
+
+			v2f uv1 = verts[indices[i + 0]].uv;
+			v2f uv2 = verts[indices[i + 1]].uv;
+			v2f uv3 = verts[indices[i + 2]].uv;
+
+			v2f delta_uv_1 = uv2 - uv1;
+			v2f delta_uv_2 = uv3 - uv1;
+
+			v3f edge_1 = pos2 - pos1;
+			v3f edge_2 = pos3 - pos1;
+
+			f32 f = 1.0f / (delta_uv_1.x * delta_uv_2.y - delta_uv_2.x * delta_uv_1.y);
+
+			v3f tangent = {
+				.x = f * (delta_uv_2.y * edge_1.x - delta_uv_1.y * edge_2.x),
+				.y = f * (delta_uv_2.y * edge_1.y - delta_uv_1.y * edge_2.y),
+				.z = f * (delta_uv_2.y * edge_1.z - delta_uv_1.y * edge_2.z)
+			};
+
+			v3f bitangent = {
+				.x = f * (-delta_uv_2.x * edge_1.x + delta_uv_1.x * edge_2.x),
+				.y = f * (-delta_uv_2.x * edge_1.y + delta_uv_1.x * edge_2.y),
+				.z = f * (-delta_uv_2.x * edge_1.z + delta_uv_1.x * edge_2.z)
+			};
+
+			verts[indices[i + 0]].tangent = tangent;
+			verts[indices[i + 1]].tangent = tangent;
+			verts[indices[i + 2]].tangent = tangent;
+
+			verts[indices[i + 0]].bitangent = bitangent;
+			verts[indices[i + 1]].bitangent = bitangent;
+			verts[indices[i + 2]].bitangent = bitangent;
 		}
 
 		Mesh3D* r = new Mesh3D();
