@@ -64,107 +64,6 @@ namespace vkr {
 		Framebuffer* get_default_framebuffer() const;
 	};
 
-	/* The Pipeline class and its children take care of
-	 * of managing a Vulkan pipeline and render pass. */
-	class VKR_API Pipeline {
-	protected:
-		VideoContext* video;
-		impl_Pipeline* handle;
-
-		Framebuffer* framebuffer;
-
-		bool is_recreating = false;
-
-		friend class IndexBuffer;
-	public:
-		enum class Stage {
-			vertex, fragment
-		};
-
-		struct Attribute {
-			u32 location;
-			usize offset;
-
-			enum class Type {
-				float1, float2, float3, float4
-			} type;
-		};
-
-		struct UniformBuffer {
-			const char* name;
-			u32 binding;
-			void* ptr;
-			usize size;
-
-			Stage stage;
-		};
-
-		struct SamplerBinding {
-			const char* name;
-			u32 binding;
-			Texture* texture;
-
-			Stage stage;
-		};
-
-		struct PushConstantRange {
-			usize size;
-			usize start;
-			Stage stage;
-		};
-
-		enum class Flags {
-			depth_test       = 1 << 0,
-			cull_back_face   = 1 << 1,
-			cull_front_face  = 1 << 2,
-			draw_to_surface  = 1 << 3,  /* Draws to the swapchain framebuffer(s) */
-			draw_headless    = 1 << 4   /* Creates and draws to its own framebuffer. */
-		} flags;
-
-		Pipeline(VideoContext* video, Flags flags, Shader* shader, usize stride,
-			Attribute* attribs, usize attrib_count,
-			Framebuffer* framebuffer,
-			UniformBuffer* uniforms = null, usize uniform_count = 0,
-			SamplerBinding* sampler_bindings = null, usize sampler_binding_count = 0,
-			PushConstantRange* pcranges = null, usize pcrange_count = 0, bool is_recreating = false);
-		virtual ~Pipeline();
-
-		void begin();
-		void end();
-
-		void push_constant(Stage stage, const void* ptr, usize size, usize offset = 0);
-		void bind_samplers(u32* indices, usize index_count);
-
-		template <typename T>
-		void push_constant(Stage stage, const T& c, usize offset = 0) {
-			push_constant(stage, &c, sizeof(T), offset);
-		}
-
-		void recreate();
-
-	private:
-		/* Cache for all of the constructor arguments for re-creating
-		 * the pipeline whenever the window is resized. */
-		Shader* shader;
-		usize stride;
-		Attribute* attribs;
-		usize attrib_count;
-		UniformBuffer* uniforms;
-	       	usize uniform_count;
-		SamplerBinding* sampler_bindings;
-		usize sampler_binding_count;
-		PushConstantRange* pcranges;
-		usize pcrange_count;
-	};
-
-	inline Pipeline::Flags operator|(Pipeline::Flags a, Pipeline::Flags b) {
-		return static_cast<Pipeline::Flags>(static_cast<i32>(a) | static_cast<i32>(b));
-	}
-
-	inline i32 operator&(Pipeline::Flags a, Pipeline::Flags b) {
-		return static_cast<i32>(a) & static_cast<i32>(b);
-	}
-
 	class VKR_API Framebuffer {
 	private:
 		VideoContext* video;
@@ -225,6 +124,116 @@ namespace vkr {
 		return static_cast<i32>(a) & static_cast<i32>(b);
 	}
 
+	/* The Pipeline class and its children take care of
+	 * of managing a Vulkan pipeline and render pass. */
+	class VKR_API Pipeline {
+	protected:
+		VideoContext* video;
+		impl_Pipeline* handle;
+
+		Framebuffer* framebuffer;
+
+		bool is_recreating = false;
+
+		friend class IndexBuffer;
+	public:
+		enum class Stage {
+			vertex, fragment
+		};
+
+		struct Attribute {
+			u32 location;
+			usize offset;
+
+			enum class Type {
+				float1, float2, float3, float4
+			} type;
+		};
+
+		struct UniformBuffer {
+			const char* name;
+			u32 binding;
+			void* ptr;
+			usize size;
+
+			Stage stage;
+		};
+
+		struct SamplerBinding {
+			const char* name;
+			u32 binding;
+
+			Stage stage;
+
+			enum class Type {
+				texture,
+				framebuffer_output
+			} type;
+			void* object;
+
+			/* Only applies to SamplerBindings with a
+			 * type of framebuffer_output. */
+			u32 attachment;
+		};
+
+		struct PushConstantRange {
+			const char* name;
+			usize size;
+			usize start;
+			Stage stage;
+		};
+
+		enum class Flags {
+			depth_test       = 1 << 0,
+			cull_back_face   = 1 << 1,
+			cull_front_face  = 1 << 2,
+		} flags;
+
+		Pipeline(VideoContext* video, Flags flags, Shader* shader, usize stride,
+			Attribute* attribs, usize attrib_count,
+			Framebuffer* framebuffer,
+			UniformBuffer* uniforms = null, usize uniform_count = 0,
+			SamplerBinding* sampler_bindings = null, usize sampler_binding_count = 0,
+			PushConstantRange* pcranges = null, usize pcrange_count = 0, bool is_recreating = false);
+		virtual ~Pipeline();
+
+		void begin();
+		void end();
+
+		void push_constant(Stage stage, const void* ptr, usize size, usize offset = 0);
+		void bind_samplers(u32* indices, usize index_count);
+
+		template <typename T>
+		void push_constant(Stage stage, const T& c, usize offset = 0) {
+			push_constant(stage, &c, sizeof(T), offset);
+		}
+
+		void recreate();
+
+	private:
+		/* Cache for all of the constructor arguments for re-creating
+		 * the pipeline whenever the window is resized. */
+		Shader* shader;
+		usize stride;
+		Attribute* attribs;
+		usize attrib_count;
+		UniformBuffer* uniforms;
+	       	usize uniform_count;
+		SamplerBinding* sampler_bindings;
+		usize sampler_binding_count;
+		usize fb_out_binding_count;
+		PushConstantRange* pcranges;
+		usize pcrange_count;
+	};
+
+	inline Pipeline::Flags operator|(Pipeline::Flags a, Pipeline::Flags b) {
+		return static_cast<Pipeline::Flags>(static_cast<i32>(a) | static_cast<i32>(b));
+	}
+
+	inline i32 operator&(Pipeline::Flags a, Pipeline::Flags b) {
+		return static_cast<i32>(a) & static_cast<i32>(b);
+	}
+
 	class VKR_API Buffer {
 	protected:
 		VideoContext* video;
@@ -240,6 +249,7 @@ namespace vkr {
 		~VertexBuffer();
 
 		void bind();
+		void draw(usize count);
 	};
 
 	class VKR_API IndexBuffer : public Buffer {

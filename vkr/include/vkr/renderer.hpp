@@ -34,14 +34,20 @@ namespace vkr {
 		} f_ub;
 
 		struct {
+			v2f screen_size;
+		} f_tonemap_ub;
+
+		struct {
 			m4f transform;
 		} v_pc;
 
-		Pipeline* pipeline;
-		Pipeline* pipeline2;
+		VertexBuffer* fullscreen_tri;
+
+		Pipeline* scene_pip;
+		Pipeline* tonemap_pip;
 		App* app;
 
-		Framebuffer* test_fb;
+		Framebuffer* scene_fb;
 
 		Model3D* model;
 	public:
@@ -68,9 +74,14 @@ namespace vkr {
 			} as;
 		};
 
+		struct ShaderConfig {
+			Shader* lit;
+			Shader* tonemap;
+		};
+
 		std::vector<Light> lights;
 
-		Renderer3D(App* app, VideoContext* video, Shader* shader, Material* materials, usize material_count);
+		Renderer3D(App* app, VideoContext* video, const ShaderConfig& shaders, Material* materials, usize material_count);
 		~Renderer3D();
 
 		void begin();

@@ -318,13 +318,13 @@ namespace vkr {
 
 		vkFreeCommandBuffers(handle->device, handle->command_pool, 1, &buffer);
 	}
-	
+
 	/* Copies the VRAM from one buffer to another, similar to how memcpy works on the CPU.
 	 *
 	 * Waits for the copy to complete before returning. */
 	static void copy_buffer(impl_VideoContext* handle, VkBuffer dst, VkBuffer src, VkDeviceSize size) {
 		VkCommandBuffer command_buffer = begin_temp_command_buffer(handle);
-		
+
 		VkBufferCopy copy{};
 		copy.size = size;
 		vkCmdCopyBuffer(command_buffer, src, dst, 1, &copy);
@@ -334,6 +334,12 @@ namespace vkr {
 
 	template <typename T>
 	static void cpu_copy_buffer(T* src, usize src_count, T** dst, usize* dst_count) {
+		if (src_count == 0) {
+			*dst = null;
+			*dst_count = 0;
+			return;
+		}
+
 		*dst_count = src_count;
 
 		*dst = new T[src_count]();
@@ -499,7 +505,7 @@ namespace vkr {
 		return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
 
-	static void new_depth_resources(impl_VideoContext* handle, VkImage* image, VkImageView* view, VmaAllocation* memory, bool can_sample = false) {
+	static void new_depth_resources(impl_VideoContext* handle, VkImage* image, VkImageView* view, VmaAllocation* memory, v2i size, bool can_sample = false) {
 		VkFormat depth_format = find_depth_format(handle);
 
 		i32 usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
@@ -507,7 +513,7 @@ namespace vkr {
 			usage = VK_IMAGE_USAGE_SAMPLED_BIT;
 		}
 
-		new_image(handle, v2i((i32)handle->swapchain_extent.width, (i32)handle->swapchain_extent.height),
+		new_image(handle, size,
 			depth_format, VK_IMAGE_TILING_OPTIMAL, usage,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory);
 		*view = new_image_view(handle, *image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
@@ -918,7 +924,7 @@ namespace vkr {
 			this->shader = shader;
 			cpu_copy_buffer(attribs, attrib_count, &this->attribs, &this->attrib_count);
 			cpu_copy_buffer(uniforms, uniform_count, &this->uniforms, &this->uniform_count);
-			cpu_copy_buffer(sampler_bindings, sampler_binding_count, &this->sampler_bindings, &sampler_binding_count);
+			cpu_copy_buffer(sampler_bindings, sampler_binding_count, &this->sampler_bindings, &this->sampler_binding_count);
 			cpu_copy_buffer(pcranges, pcrange_count, &this->pcranges, &this->pcrange_count);
 
 			video->pipelines.push_back(this);
@@ -1075,10 +1081,6 @@ namespace vkr {
 		}
 
 		/* Create descriptor pool. */
-		VkDescriptorPoolSize pool_size{};
-		pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		pool_size.descriptorCount = max_frames_in_flight * uniform_count;
-
 		VkDescriptorPoolSize pool_sizes[] = {
 			{
 				.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -1088,7 +1090,7 @@ namespace vkr {
 				.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.descriptorCount = max_frames_in_flight * (u32)sampler_binding_count
 			}
-		};
+		};	
 
 		VkDescriptorPoolCreateInfo pool_info{};
 		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1115,7 +1117,7 @@ namespace vkr {
 		desc_set_alloc_info.pSetLayouts = layouts;
 
 		if (vkAllocateDescriptorSets(video->handle->device, &desc_set_alloc_info, handle->descriptor_sets) != VK_SUCCESS) {
-			abort_with("Failed to allocate descriptor sets.");
+			abort_with("Failed to allocate uniform buffer descriptor sets.");
 		}
 
 		for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
@@ -1131,7 +1133,7 @@ namespace vkr {
 			set_alloc_info.pSetLayouts = layouts;
 
 			if (vkAllocateDescriptorSets(video->handle->device, &set_alloc_info, handle->sampler_bindings[i].descriptor_sets) != VK_SUCCESS) {
-				abort_with("Failed to allocate descriptor sets.");
+				abort_with("Failed to allocate sampler descriptor sets.");
 			}
 		}
 
@@ -1172,11 +1174,24 @@ namespace vkr {
 
 		/* Write the sampler descriptor sets. */
 		for (usize i = 0; i < sampler_binding_count; i++) {
+			auto sampler_binding = sampler_bindings + i;
+
 			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
 				VkDescriptorImageInfo image_info{};
-				image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				image_info.imageView = sampler_bindings[i].texture->handle->view;
-				image_info.sampler = sampler_bindings[i].texture->handle->sampler;
+
+				if (sampler_binding->type == SamplerBinding::Type::texture) {
+					auto texture = reinterpret_cast<Texture*>(sampler_binding->object);
+
+					image_info.imageView = texture->handle->view;
+					image_info.sampler   = texture->handle->sampler;
+					image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				} else if (sampler_binding->type == SamplerBinding::Type::framebuffer_output) {
+					auto fb = reinterpret_cast<Framebuffer*>(sampler_binding->object);
+
+					image_info.imageView = fb->handle->colors[sampler_binding->attachment].image_views[ii];
+					image_info.sampler   = fb->handle->sampler;
+					image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				}
 
 				VkWriteDescriptorSet desc_write{};
 				desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1343,7 +1358,7 @@ namespace vkr {
 		is_recreating = true;
 
 		/* The C++ Gods hate me. The C# Gods hate me even more. */
-		this->~Pipeline();	
+		this->~Pipeline();
 		new(this) Pipeline(video, flags, shader, stride,
 			attribs, attrib_count, framebuffer, uniforms, uniform_count,
 			sampler_bindings, sampler_binding_count, pcranges, pcrange_count, true);
@@ -1426,7 +1441,12 @@ namespace vkr {
 				ca_descs[idx].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 				ca_descs[idx].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 				ca_descs[idx].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-				ca_descs[idx].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+				
+				if (flags & Flags::headless) {
+					ca_descs[idx].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				} else {
+					ca_descs[idx].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+				}
 
 				ca_refs[idx].attachment = i;
 				ca_refs[idx].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -1529,7 +1549,7 @@ namespace vkr {
 
 			/* Create the depth buffer. */
 			if (use_depth) {
-				new_depth_resources(video->handle, &handle->depth_image, &handle->depth_image_view, &handle->depth_memory);
+				new_depth_resources(video->handle, &handle->depth_image, &handle->depth_image_view, &handle->depth_memory, size);
 				image_attachments[1] = handle->depth_image_view;
 			}
 
@@ -1561,7 +1581,8 @@ namespace vkr {
 
 				for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
 					new_image(video->handle, size, fmt, VK_IMAGE_TILING_OPTIMAL,
-						VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+						VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 						attachment->images + ii, attachment->image_memories + ii);
 					attachment->image_views[ii] = new_image_view(video->handle, attachment->images[ii],
 						fmt, VK_IMAGE_ASPECT_COLOR_BIT);
@@ -1572,7 +1593,7 @@ namespace vkr {
 			if (use_depth) {
 				for (u32 i = 0; i < max_frames_in_flight; i++) {
 					new_depth_resources(video->handle, &handle->depth.images[i],
-						&handle->depth.image_views[i], &handle->depth.image_memories[i]);
+						&handle->depth.image_views[i], &handle->depth.image_memories[i], size);
 				}
 			}
 
@@ -1678,6 +1699,7 @@ namespace vkr {
 	void Framebuffer::resize(v2i new_size) {
 		is_recreating = true;
 
+		/* [Evil laugher] */
 		this->~Framebuffer();
 		new(this) Framebuffer(video, flags, new_size, attachments, attachment_count, true);
 
@@ -1726,6 +1748,12 @@ namespace vkr {
 		VkBuffer vbs[] = { handle->buffer };
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(video->handle->command_buffers[video->current_frame], 0, 1, vbs, offsets);
+	}
+
+	void VertexBuffer::draw(usize count) {
+		if (video->skip_frame) { return; }
+
+		vkCmdDraw(video->handle->command_buffers[video->current_frame], count, 1, 0, 0);
 	}
 
 	IndexBuffer::IndexBuffer(VideoContext* video, u16* indices, usize count) : Buffer(video), count(count) {

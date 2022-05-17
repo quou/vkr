@@ -2,8 +2,23 @@
 #include "vkr.hpp"
 
 namespace vkr {
-	Renderer3D::Renderer3D(App* app, VideoContext* video, Shader* shader, Material* materials, usize material_count) :
-		app(app) {
+	Renderer3D::Renderer3D(App* app, VideoContext* video, const ShaderConfig& shaders, Material* materials, usize material_count) :
+		app(app), model(null) {
+
+		Framebuffer::Attachment attachments[] = {
+			{
+				.type = Framebuffer::Attachment::Type::color,
+				.format = Framebuffer::Attachment::Format::rgbaf16,
+			},
+			{
+				.type = Framebuffer::Attachment::Type::depth,
+				.format = Framebuffer::Attachment::Format::depth,
+			},
+		};
+
+		scene_fb = new Framebuffer(video,
+			Framebuffer::Flags::headless | Framebuffer::Flags::fit,
+			app->get_size(), attachments, 2);
 
 		Pipeline::Attribute attribs[] = {
 			{ /* vec3 position. */
@@ -42,6 +57,7 @@ namespace vkr {
 
 		Pipeline::PushConstantRange pc[] = {
 			{
+				.name = "transform",
 				.size = sizeof(v_pc),
 				.start = 0,
 				.stage = Pipeline::Stage::vertex
@@ -50,61 +66,90 @@ namespace vkr {
 
 		usize sampler_binding_count = material_count * Material::get_texture_count();
 		auto samplers = new Pipeline::SamplerBinding[sampler_binding_count];
+
 		for (usize i = 0; i < material_count; i += Material::get_texture_count()) {
 			Pipeline::SamplerBinding* albedo_binding = samplers + i;
 
 			albedo_binding->name = "albedo";
 			albedo_binding->binding = 0;
-			albedo_binding->texture = materials[i].albedo;
+			albedo_binding->type = Pipeline::SamplerBinding::Type::texture;
+			albedo_binding->object = materials[i].albedo;
 			albedo_binding->stage = Pipeline::Stage::fragment;
 		};
 
-		pipeline = new Pipeline(video,
-			Pipeline::Flags::draw_to_surface |
+		scene_pip = new Pipeline(video,
 			Pipeline::Flags::depth_test |
 			Pipeline::Flags::cull_back_face,
-			shader,
+			shaders.lit,
 			sizeof(Vertex),
 			attribs, 3,
-			app->get_default_framebuffer(),
+			scene_fb,
 			ubuffers, 2,
 			samplers, sampler_binding_count,
 			pc, 1);
 
-		Framebuffer::Attachment attachments[] = {
-			{
-				.type = Framebuffer::Attachment::Type::color,
-				.format = Framebuffer::Attachment::Format::rgbaf16,
+		Pipeline::Attribute post_attribs[] = {
+			{ /* vec2 position. */
+				.location = 0,
+				.offset   = 0,
+				.type     = Pipeline::Attribute::Type::float2
 			},
-			{
-				.type = Framebuffer::Attachment::Type::depth,
-				.format = Framebuffer::Attachment::Format::depth,
+			{ /* vec2 UV. */
+				.location = 1,
+				.offset   = sizeof(v2f),
+				.type     = Pipeline::Attribute::Type::float2
 			},
 		};
 
-		test_fb = new Framebuffer(video,
-			Framebuffer::Flags::headless | Framebuffer::Flags::fit,
-			app->get_size(), attachments, 2);
+		v2f tri_verts[] = {
+			/* Position          UV */
+			{ -1.0, -1.0 },      { 0.0f, 0.0f },
+			{ -1.0,  3.0 },      { 0.0f, 2.0f },
+			{  3.0, -1.0 },      { 2.0f, 0.0f }
 
-		pipeline2 = new Pipeline(video,
-			Pipeline::Flags::draw_to_surface |
+		};
+
+		fullscreen_tri = new VertexBuffer(video, tri_verts, sizeof(tri_verts));
+
+		Pipeline::UniformBuffer tonemap_ubuffers[] = {
+			{
+				.name    = "fragment_uniform_buffer",
+				.binding = 0,
+				.ptr     = &f_tonemap_ub,
+				.size    = sizeof(f_tonemap_ub),
+				.stage   = Pipeline::Stage::fragment
+			},
+		};
+
+		Pipeline::SamplerBinding tonemap_samplers[] = {
+			{
+				.name = "input",
+				.binding = 0,
+				.stage = Pipeline::Stage::fragment,
+				.type = Pipeline::SamplerBinding::Type::framebuffer_output,
+				.object = scene_fb,
+				.attachment = 0
+			}
+		};
+
+		tonemap_pip = new Pipeline(video,
 			Pipeline::Flags::depth_test |
 			Pipeline::Flags::cull_back_face,
-			shader,
-			sizeof(Vertex),
-			attribs, 3,
-			test_fb,
-			ubuffers, 2,
-			samplers, sampler_binding_count,
-			pc, 1);
+			shaders.tonemap,
+			sizeof(v2f) * 2,
+			post_attribs, 2,
+			app->get_default_framebuffer(),
+			tonemap_ubuffers, 1,
+			tonemap_samplers, 1);
 
 		delete[] samplers;
 	}
 
 	Renderer3D::~Renderer3D() {
-		delete test_fb;
-		delete pipeline2;
-		delete pipeline;
+		delete fullscreen_tri;
+		delete scene_fb;
+		delete tonemap_pip;
+		delete scene_pip;
 	}
 
 	void Renderer3D::begin() {
@@ -134,26 +179,22 @@ namespace vkr {
 			}
 		}
 
-		pipeline->begin();
+		scene_pip->begin();
 	}
 
 	void Renderer3D::end() {
-		pipeline->end();
+		scene_pip->end();
 
-		pipeline2->begin();
+		tonemap_pip->begin();
 
-		for (auto mesh : model->meshes) {
-			u32 samplers[] = {
-				0 /* albedo */
-			};
+		u32 samplers[] = { 0 };
 
-			pipeline->push_constant(Pipeline::Stage::vertex, v_pc);
-			pipeline->bind_samplers(samplers, Material::get_texture_count());
-			mesh->vb->bind();
-			mesh->ib->draw();
-		}
+		tonemap_pip->bind_samplers(samplers, 1);
 
-		pipeline2->end();
+		fullscreen_tri->bind();
+		fullscreen_tri->draw(3);
+
+		tonemap_pip->end();
 	}
 
 	void Renderer3D::draw(Model3D* model, m4f transform, usize material_id) {
@@ -165,8 +206,8 @@ namespace vkr {
 				(u32)((material_id + 0) * Material::get_texture_count()) /* albedo */
 			};
 
-			pipeline->push_constant(Pipeline::Stage::vertex, v_pc);
-			pipeline->bind_samplers(samplers, Material::get_texture_count());
+			scene_pip->push_constant(Pipeline::Stage::vertex, v_pc);
+			scene_pip->bind_samplers(samplers, Material::get_texture_count());
 			mesh->vb->bind();
 			mesh->ib->draw();
 		}
