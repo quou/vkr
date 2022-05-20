@@ -1,7 +1,8 @@
+#include <unordered_map>
 #include <vector>
 
-#include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
+#include <vulkan/vulkan.h>
 
 #include "vkr.hpp"
 
@@ -124,6 +125,8 @@ namespace vkr {
 
 			return swapchain_framebuffers[image_id];
 		}
+
+		std::unordered_map<u32, impl_Attachment*> attachment_map;
 	};
 
 	struct impl_Shader {

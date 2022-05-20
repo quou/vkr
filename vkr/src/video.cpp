@@ -1184,7 +1184,7 @@ namespace vkr {
 							auto fb = set->descriptors[ii].resource.framebuffer.ptr;
 							auto attachment = set->descriptors[ii].resource.framebuffer.attachment;	
 
-							image_info.imageView   = fb->handle->colors[attachment].image_views[j];
+							image_info.imageView   = fb->handle->attachment_map[attachment]->image_views[j];
 							image_info.sampler     = fb->handle->sampler;
 							image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
@@ -1461,6 +1461,16 @@ namespace vkr {
 		if (flags & Flags::default_fb) {
 			/* Only one colour attachment is supported on the default framebuffer. */
 			color_attachment_count = 1;
+		} else {
+			/* Map the actual indices to attachments. */
+			handle->colors = new impl_Attachment[color_attachment_count];
+			for (usize i = 0, ci = 0; i < attachment_count; i++, ci++) {
+				if (attachments[i].type == Attachment::Type::color) {
+					handle->attachment_map[(u32)i] = handle->colors + ci;
+				} else {
+					handle->attachment_map[(u32)i] = &handle->depth;
+				}
+			}
 		}
 
 		handle->color_count = color_attachment_count;
@@ -1488,14 +1498,6 @@ namespace vkr {
 		if (use_depth) {
 			subpass.pDepthStencilAttachment = &depth_attachment_ref;
 		}
-
-		VkSubpassDependency dep{};
-		dep.srcSubpass = VK_SUBPASS_EXTERNAL;
-		dep.dstSubpass = 0;
-		dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dep.srcAccessMask = 0;
-		dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
 		/* Combine the depth and color attachments into a single array suitable
 		 * for giving to vkCreateRenderPass. */
@@ -1531,14 +1533,41 @@ namespace vkr {
 			handle->clear_color_count = attachment_count;
 		}
 
+		VkSubpassDependency deps[2];
+		usize dep_count = 0;
+
+		if (color_attachment_count > 0) {
+			deps[dep_count].srcSubpass      = VK_SUBPASS_EXTERNAL;
+			deps[dep_count].dstSubpass      = 0;
+			deps[dep_count].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			deps[dep_count].srcAccessMask   = 0;
+			deps[dep_count].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			deps[dep_count].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			deps[dep_count].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+			dep_count++;
+		}
+
+		if (use_depth) {
+			deps[dep_count].srcSubpass      = VK_SUBPASS_EXTERNAL;
+			deps[dep_count].dstSubpass      = 0;
+			deps[dep_count].srcStageMask    = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+			deps[dep_count].srcAccessMask   = 0;
+			deps[dep_count].dstStageMask    = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+			deps[dep_count].dstAccessMask   = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			deps[dep_count].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+			dep_count++;
+		}
+
 		VkRenderPassCreateInfo render_pass_info{};
 		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 		render_pass_info.attachmentCount = (u32)attachment_count;
 		render_pass_info.pAttachments = v_attachments;
 		render_pass_info.subpassCount = 1;
 		render_pass_info.pSubpasses = &subpass;
-		render_pass_info.dependencyCount = 1;
-		render_pass_info.pDependencies = &dep;
+		render_pass_info.dependencyCount = dep_count;
+		render_pass_info.pDependencies = deps;
 
 		if (vkCreateRenderPass(video->handle->device, &render_pass_info, null, &handle->render_pass)) {
 			abort_with("Failed to create render pass.");
@@ -1578,7 +1607,6 @@ namespace vkr {
 			/* Create images and image views for off-screen rendering. */
 			handle->framebuffers = handle->offscreen_framebuffers;
 
-			handle->colors = new impl_Attachment[color_attachment_count];
 			for (usize i = 0; i < color_attachment_count; i++) {
 				auto attachment = handle->colors + i;
 
@@ -1597,6 +1625,8 @@ namespace vkr {
 
 			/* Create the depth buffers. */
 			if (use_depth) {
+				auto fmt = find_depth_format(video->handle);
+
 				for (u32 i = 0; i < max_frames_in_flight; i++) {
 					new_depth_resources(video->handle, &handle->depth.images[i],
 						&handle->depth.image_views[i], &handle->depth.image_memories[i], size * scale);
