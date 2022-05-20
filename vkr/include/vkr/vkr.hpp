@@ -289,7 +289,7 @@ namespace vkr {
 
 		friend class Pipeline;
 	public:
-		Texture(VideoContext* video, void* data, v2i size, u32 component_count);
+		Texture(VideoContext* video, const void* data, v2i size, u32 component_count);
 		~Texture();
 
 		static Texture* from_file(VideoContext* video, const char* file_path);

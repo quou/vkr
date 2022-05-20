@@ -13,6 +13,35 @@ namespace vkr {
 	static usize constexpr max_point_lights = 32;
 
 	class VKR_API Renderer3D {
+	public:
+		struct Material {
+			Texture* diffuse;
+			Texture* normal;
+
+			static constexpr usize get_texture_count() { return 2; }
+		};
+
+		struct Light {
+			enum class Type {
+				point
+			} type;
+
+			f32 intensity;
+			v3f specular;
+			v3f diffuse;
+
+			union {
+				struct {
+					v3f position;
+					f32 range;
+				} point;
+			} as;
+		};
+
+		struct ShaderConfig {
+			Shader* lit;
+			Shader* tonemap;
+		};
 	private:
 		struct impl_PointLight {
 			alignas(4)  float intensity;
@@ -41,45 +70,25 @@ namespace vkr {
 			m4f transform;
 		} v_pc;
 
+		struct {
+			f32 use_diffuse_map;
+			f32 use_normal_map;
+		} f_pc;
+
 		VertexBuffer* fullscreen_tri;
 
 		Pipeline* scene_pip;
 		Pipeline* tonemap_pip;
 		App* app;
 
+		Texture* default_texture;
+
 		Framebuffer* scene_fb;
 
 		Model3D* model;
+
+		Material* materials;
 	public:
-		struct Material {
-			Texture* albedo;
-			Texture* normal;
-
-			static constexpr usize get_texture_count() { return 2; }
-		};
-
-		struct Light {
-			enum class Type {
-				point
-			} type;
-
-			f32 intensity;
-			v3f specular;
-			v3f diffuse;
-
-			union {
-				struct {
-					v3f position;
-					f32 range;
-				} point;
-			} as;
-		};
-
-		struct ShaderConfig {
-			Shader* lit;
-			Shader* tonemap;
-		};
-
 		std::vector<Light> lights;
 
 		Renderer3D(App* app, VideoContext* video, const ShaderConfig& shaders, Material* materials, usize material_count);

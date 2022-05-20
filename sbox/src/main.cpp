@@ -54,12 +54,11 @@ public:
 
 		Renderer3D::Material materials[] = {
 			{
-				.albedo = wall_a,
+				.diffuse = wall_a,
 				.normal = wall_n
 			},
 			{
-				.albedo = wood_a,
-				.normal = wall_n
+				.diffuse = wood_a,
 			}
 		};
 

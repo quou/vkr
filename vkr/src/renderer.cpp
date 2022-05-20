@@ -1,9 +1,18 @@
+#include <string.h> /* memcpy */
+
 #include "renderer.hpp"
 #include "vkr.hpp"
+
+static const vkr::u32 default_texture_data[2][2] = {
+	0xff00ffff, 0x000000ff,
+	0x000000ff, 0xff00ffff
+};
 
 namespace vkr {
 	Renderer3D::Renderer3D(App* app, VideoContext* video, const ShaderConfig& shaders, Material* materials, usize material_count) :
 		app(app), model(null) {
+
+		default_texture = new Texture(video, (const void*)default_texture_data, v2i(2, 2), 4);
 
 		Framebuffer::Attachment attachments[] = {
 			{
@@ -59,8 +68,17 @@ namespace vkr {
 				.size = sizeof(v_pc),
 				.start = 0,
 				.stage = Pipeline::Stage::vertex
+			},
+			{
+				.name = "frag_data",
+				.size = sizeof(f_pc),
+				.start = sizeof(v_pc),
+				.stage = Pipeline::Stage::fragment
 			}
 		};
+
+		this->materials = new Material[material_count]();
+		memcpy(this->materials, materials, material_count * sizeof(Material));
 
 		Pipeline::Descriptor uniform_descs[2];
 		uniform_descs[0].name = "vertex_uniform_buffer";
@@ -91,13 +109,13 @@ namespace vkr {
 			tex_descs[0].binding = 0;
 			tex_descs[0].stage = Pipeline::Stage::fragment;
 			tex_descs[0].resource.type = Pipeline::ResourcePointer::Type::texture;
-			tex_descs[0].resource.texture.ptr = materials[i].albedo;
+			tex_descs[0].resource.texture.ptr = materials[i].diffuse != null ? materials[i].diffuse : default_texture;
 
 			tex_descs[1].name = "normal";
 			tex_descs[1].binding = 1;
 			tex_descs[1].stage = Pipeline::Stage::fragment;
 			tex_descs[1].resource.type = Pipeline::ResourcePointer::Type::texture;
-			tex_descs[1].resource.texture.ptr = materials[i].normal;
+			tex_descs[1].resource.texture.ptr = materials[i].normal != null ? materials[i].normal : default_texture;
 
 			set->descriptors = tex_descs;
 			set->count = Material::get_texture_count();
@@ -111,7 +129,7 @@ namespace vkr {
 			attribs, 5,
 			scene_fb,
 			desc_sets, material_count + 1,
-			pc, 1);
+			pc, 2);
 
 		Pipeline::Attribute post_attribs[] = {
 			{
@@ -188,6 +206,10 @@ namespace vkr {
 		delete scene_fb;
 		delete tonemap_pip;
 		delete scene_pip;
+
+		delete[] materials;
+
+		delete default_texture;
 	}
 
 	void Renderer3D::begin() {
@@ -240,9 +262,13 @@ namespace vkr {
 		scene_pip->bind_descriptor_set(0, 0);
 		scene_pip->bind_descriptor_set(1, 1 + material_id);
 
+		f_pc.use_diffuse_map = materials[material_id].diffuse == null ? 0.0f : 1.0f;
+		f_pc.use_normal_map  = materials[material_id].normal  == null ? 0.0f : 1.0f;
+
 		v_pc.transform = transform;
 		for (auto mesh : model->meshes) {
 			scene_pip->push_constant(Pipeline::Stage::vertex, v_pc);
+			scene_pip->push_constant(Pipeline::Stage::fragment, f_pc, sizeof(v_pc));
 			mesh->vb->bind();
 			mesh->ib->draw();
 		}

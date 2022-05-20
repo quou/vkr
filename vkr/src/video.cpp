@@ -1218,10 +1218,9 @@ namespace vkr {
 			delete[] layout_bindings;
 		}
 
-		auto pc_ranges = new VkPushConstantRange[pcrange_count];
+		auto pc_ranges = new VkPushConstantRange[pcrange_count]();
 		for (usize i = 0; i < pcrange_count; i++) {
-			memset(pc_ranges + i, 0, sizeof(*pc_ranges));
-			pc_ranges[i].stageFlags = pcranges[i].stage ==Stage::vertex ?
+			pc_ranges[i].stageFlags = pcranges[i].stage == Stage::vertex ?
 				VK_SHADER_STAGE_VERTEX_BIT :
 				VK_SHADER_STAGE_FRAGMENT_BIT;
 			pc_ranges[i].offset = pcranges[i].start;
@@ -1801,7 +1800,7 @@ namespace vkr {
 		video->object_count++;
 	}
 
-	Texture::Texture(VideoContext* video, void* data, v2i size, u32 component_count) :
+	Texture::Texture(VideoContext* video, const void* data, v2i size, u32 component_count) :
 		video(video), size(size), component_count(component_count) {
 
 		handle = new impl_Texture();
@@ -1821,6 +1820,7 @@ namespace vkr {
 		memcpy(remote_data, data, image_size);
 		vmaUnmapMemory(video->handle->allocator, stage_buffer_memory);
 
+		/* TODO: Take this from the component count. */
 		auto format = VK_FORMAT_R8G8B8A8_UNORM;
 
 		new_image(video->handle, size, format, VK_IMAGE_TILING_OPTIMAL,
