@@ -55,7 +55,7 @@ namespace vkr {
 			Texture* albedo;
 			Texture* normal;
 
-			static inline usize get_texture_count() { return 2; }
+			static constexpr usize get_texture_count() { return 2; }
 		};
 
 		struct Light {

@@ -53,23 +53,6 @@ namespace vkr {
 			},
 		};
 
-	/*	Pipeline::UniformBuffer ubuffers[] = {
-			{
-				.name    = "vertex_uniform_buffer",
-				.binding = 0,
-				.ptr     = &v_ub,
-				.size    = sizeof(v_ub),
-				.stage   = Pipeline::Stage::vertex
-			},
-			{
-				.name    = "fragment_uniform_buffer",
-				.binding = 1,
-				.ptr     = &f_ub,
-				.size    = sizeof(f_ub),
-				.stage   = Pipeline::Stage::fragment
-			},
-		};*/
-
 		Pipeline::PushConstantRange pc[] = {
 			{
 				.name = "transform",
@@ -94,34 +77,31 @@ namespace vkr {
 		uniform_descs[1].resource.uniform.ptr  = &f_ub;
 		uniform_descs[1].resource.uniform.size = sizeof(f_ub);
 
-		Pipeline::DescriptorSet desc_sets[] = {
-			{
-				.name = "uniforms",
-				.descriptors = uniform_descs,
-				.count = 2
-			}
-		};
+		auto desc_sets = new Pipeline::DescriptorSet[1 + material_count]();
+		desc_sets[0].name = "uniforms";
+		desc_sets[0].descriptors = uniform_descs;
+		desc_sets[0].count = 2;
 
-		usize sampler_binding_count = material_count * Material::get_texture_count();
-		auto samplers = new Pipeline::SamplerBinding[sampler_binding_count];
+		for (usize i = 0; i < material_count; i++) {
+			auto set = desc_sets + i + 1;
 
-		usize mat_idx = 0;
-		for (usize i = 0; i < sampler_binding_count; i += Material::get_texture_count(), mat_idx++) {
-			auto albedo_binding = samplers + i;
-			auto normal_binding = samplers + i + 1;
+			auto tex_descs = new Pipeline::Descriptor[Material::get_texture_count()]();
 
-			albedo_binding->name = "albedo";
-			albedo_binding->binding = 0;
-			albedo_binding->type = Pipeline::SamplerBinding::Type::texture;
-			albedo_binding->object = materials[mat_idx].albedo;
-			albedo_binding->stage = Pipeline::Stage::fragment;
+			tex_descs[0].name = "diffuse";
+			tex_descs[0].binding = 0;
+			tex_descs[0].stage = Pipeline::Stage::fragment;
+			tex_descs[0].resource.type = Pipeline::ResourcePointer::Type::texture;
+			tex_descs[0].resource.texture.ptr = materials[i].albedo;
 
-			normal_binding->name = "normal";
-			normal_binding->binding = 1;
-			normal_binding->type = Pipeline::SamplerBinding::Type::texture;
-			normal_binding->object = materials[mat_idx].normal;
-			normal_binding->stage = Pipeline::Stage::fragment;
-		};
+			tex_descs[1].name = "normal";
+			tex_descs[1].binding = 1;
+			tex_descs[1].stage = Pipeline::Stage::fragment;
+			tex_descs[1].resource.type = Pipeline::ResourcePointer::Type::texture;
+			tex_descs[1].resource.texture.ptr = materials[i].normal;
+
+			set->descriptors = tex_descs;
+			set->count = Material::get_texture_count();
+		}
 
 		scene_pip = new Pipeline(video,
 			Pipeline::Flags::depth_test |
@@ -129,18 +109,19 @@ namespace vkr {
 			shaders.lit,
 			sizeof(Vertex),
 			attribs, 5,
-			app->get_default_framebuffer(),
-			desc_sets, 1,
+			scene_fb,
+			desc_sets, material_count + 1,
 			pc, 1);
 
-#if 0
 		Pipeline::Attribute post_attribs[] = {
-			{ /* vec2 position. */
+			{
+				.name     = "position",
 				.location = 0,
 				.offset   = 0,
 				.type     = Pipeline::Attribute::Type::float2
 			},
-			{ /* vec2 UV. */
+			{
+				.name     = "uv",
 				.location = 1,
 				.offset   = sizeof(v2f),
 				.type     = Pipeline::Attribute::Type::float2
@@ -156,25 +137,33 @@ namespace vkr {
 		};
 
 		fullscreen_tri = new VertexBuffer(video, tri_verts, sizeof(tri_verts));
-#endif
-	/*	Pipeline::UniformBuffer tonemap_ubuffers[] = {
-			{
-				.name    = "fragment_uniform_buffer",
-				.binding = 0,
-				.ptr     = &f_tonemap_ub,
-				.size    = sizeof(f_tonemap_ub),
-				.stage   = Pipeline::Stage::fragment
-			},
-		};
 
-		Pipeline::SamplerBinding tonemap_samplers[] = {
+		Pipeline::Descriptor tonemap_uniform_desc{};
+		tonemap_uniform_desc.name = "fragment_uniform_buffer";
+		tonemap_uniform_desc.binding = 0;
+		tonemap_uniform_desc.stage = Pipeline::Stage::fragment;
+		tonemap_uniform_desc.resource.type = Pipeline::ResourcePointer::Type::uniform_buffer;
+		tonemap_uniform_desc.resource.uniform.ptr  = &f_tonemap_ub;
+		tonemap_uniform_desc.resource.uniform.size = sizeof(f_tonemap_ub);
+
+		Pipeline::Descriptor tonemap_sampler_desc{};
+		tonemap_sampler_desc.name = "input";
+		tonemap_sampler_desc.binding = 0;
+		tonemap_sampler_desc.stage = Pipeline::Stage::fragment;
+		tonemap_sampler_desc.resource.type = Pipeline::ResourcePointer::Type::framebuffer_output;
+		tonemap_sampler_desc.resource.framebuffer.ptr = scene_fb;
+		tonemap_sampler_desc.resource.framebuffer.attachment = 0;
+
+		Pipeline::DescriptorSet tonemap_desc_sets[] = {
 			{
-				.name = "input",
-				.binding = 0,
-				.stage = Pipeline::Stage::fragment,
-				.type = Pipeline::SamplerBinding::Type::framebuffer_output,
-				.object = scene_fb,
-				.attachment = 0
+				.name = "uniforms",
+				.descriptors = &tonemap_uniform_desc,
+				.count = 1,
+			},
+			{
+				.name = "samplers",
+				.descriptors = &tonemap_sampler_desc,
+				.count = 1
 			}
 		};
 
@@ -185,16 +174,19 @@ namespace vkr {
 			sizeof(v2f) * 2,
 			post_attribs, 2,
 			app->get_default_framebuffer(),
-			tonemap_ubuffers, 1,
-			tonemap_samplers, 1);
+			tonemap_desc_sets, 2);
 
-		delete[] samplers;*/
+		for (usize i = 0; i < material_count; i++) {
+			delete[] desc_sets[i + 1].descriptors;
+		}
+
+		delete[] desc_sets;
 	}
 
 	Renderer3D::~Renderer3D() {
-		//delete fullscreen_tri;
+		delete fullscreen_tri;
 		delete scene_fb;
-	//	delete tonemap_pip;
+		delete tonemap_pip;
 		delete scene_pip;
 	}
 
@@ -231,25 +223,26 @@ namespace vkr {
 	void Renderer3D::end() {
 		scene_pip->end();
 
-	/*	tonemap_pip->begin();
+		tonemap_pip->begin();
 
-		u32 samplers[] = { 0 };
-
-		tonemap_pip->bind_samplers(samplers, 1);
+		tonemap_pip->bind_descriptor_set(0, 0);
+		tonemap_pip->bind_descriptor_set(1, 1);
 
 		fullscreen_tri->bind();
 		fullscreen_tri->draw(3);
 
-		tonemap_pip->end();*/
+		tonemap_pip->end();
 	}
 
 	void Renderer3D::draw(Model3D* model, m4f transform, usize material_id) {
 		this->model = model;
 
+		scene_pip->bind_descriptor_set(0, 0);
+		scene_pip->bind_descriptor_set(1, 1 + material_id);
+
 		v_pc.transform = transform;
 		for (auto mesh : model->meshes) {
 			scene_pip->push_constant(Pipeline::Stage::vertex, v_pc);
-			scene_pip->bind_descriptor_set(0);
 			mesh->vb->bind();
 			mesh->ib->draw();
 		}

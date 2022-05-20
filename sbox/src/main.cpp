@@ -60,14 +60,10 @@ public:
 			{
 				.albedo = wood_a,
 				.normal = wall_n
-			},
-			{
-				.albedo = wall_n,
-				.normal = wall_n
 			}
 		};
 
-		renderer = new Renderer3D(this, video, shaders, materials, 3);
+		renderer = new Renderer3D(this, video, shaders, materials, 2);
 		renderer->lights.push_back(Renderer3D::Light {
 			.type = Renderer3D::Light::Type::point,
 			.intensity = 10.0f,
@@ -110,7 +106,7 @@ public:
 		renderer->begin();
 			renderer->draw(monkey, m4f::translate(m4f::identity(), v3f(-2.5f, 0.0f, 0.0f)), 0);
 			renderer->draw(monkey, m4f::rotate(m4f::identity(), rot, v3f(0.0f, 1.0f, 0.0f)), 1);
-			renderer->draw(monkey, m4f::translate(m4f::identity(), v3f(2.5f, 0.0f, 0.0f)), 2);
+			renderer->draw(monkey, m4f::translate(m4f::identity(), v3f(2.5f, 0.0f, 0.0f)), 1);
 			renderer->draw(cube, m4f::translate(m4f::identity(), v3f(0.0f, -2.0f, 0.0f)), 0);
 		renderer->end();
 

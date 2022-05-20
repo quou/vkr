@@ -154,32 +154,6 @@ namespace vkr {
 			} type;
 		};
 
-		struct UniformBuffer {
-			const char* name;
-			u32 binding;
-			void* ptr;
-			usize size;
-
-			Stage stage;
-		};
-
-		struct SamplerBinding {
-			const char* name;
-			u32 binding;
-
-			Stage stage;
-
-			enum class Type {
-				texture,
-				framebuffer_output
-			} type;
-			void* object;
-
-			/* Only applies to SamplerBindings with a
-			 * type of framebuffer_output. */
-			u32 attachment;
-		};
-
 		struct ResourcePointer {
 			enum class Type {
 				texture,
@@ -245,7 +219,7 @@ namespace vkr {
 		void end();
 
 		void push_constant(Stage stage, const void* ptr, usize size, usize offset = 0);
-		void bind_descriptor_set(usize index);
+		void bind_descriptor_set(usize target, usize index);
 
 		template <typename T>
 		void push_constant(Stage stage, const T& c, usize offset = 0) {

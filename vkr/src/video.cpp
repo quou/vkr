@@ -1178,10 +1178,11 @@ namespace vkr {
 							image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 							write->descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+							write->pImageInfo = &image_info;
 						} break;
 						case ResourcePointer::Type::framebuffer_output: {	
 							auto fb = set->descriptors[ii].resource.framebuffer.ptr;
-							auto attachment = set->descriptors[ii].resource.framebuffer.attachment;
+							auto attachment = set->descriptors[ii].resource.framebuffer.attachment;	
 
 							image_info.imageView   = fb->handle->colors[attachment].image_views[j];
 							image_info.sampler     = fb->handle->sampler;
@@ -1351,11 +1352,11 @@ namespace vkr {
 		offset, size, ptr);
 	}
 
-	void Pipeline::bind_descriptor_set(usize index) {
+	void Pipeline::bind_descriptor_set(usize target, usize index) {
 		if (video->skip_frame) { return; }
 
 		vkCmdBindDescriptorSets(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
-			handle->pipeline_layout, index, 1,
+			handle->pipeline_layout, target, 1,
 			handle->desc_sets[index].sets + video->current_frame, 0, null);
 	}
 
