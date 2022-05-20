@@ -913,19 +913,23 @@ namespace vkr {
 	Pipeline::Pipeline(VideoContext* video, Flags flags, Shader* shader, usize stride,
 			Attribute* attribs, usize attrib_count,
 			Framebuffer* framebuffer,
-			UniformBuffer* uniforms, usize uniform_count,
-			SamplerBinding* sampler_bindings, usize sampler_binding_count,
+			DescriptorSet* desc_sets, usize desc_set_count,
 			PushConstantRange* pcranges, usize pcrange_count, bool is_recreating) : is_recreating(is_recreating),
-			video(video), uniform_count(uniform_count), sampler_binding_count(sampler_binding_count),
+			video(video), descriptor_set_count(desc_set_count),
 			flags(flags), framebuffer(framebuffer), stride(stride) {
 		handle = new impl_Pipeline();
 
 		if (!is_recreating) {
 			this->shader = shader;
 			cpu_copy_buffer(attribs, attrib_count, &this->attribs, &this->attrib_count);
-			cpu_copy_buffer(uniforms, uniform_count, &this->uniforms, &this->uniform_count);
-			cpu_copy_buffer(sampler_bindings, sampler_binding_count, &this->sampler_bindings, &this->sampler_binding_count);
+			cpu_copy_buffer(desc_sets, desc_set_count, &this->descriptor_sets, &this->descriptor_set_count);
 			cpu_copy_buffer(pcranges, pcrange_count, &this->pcranges, &this->pcrange_count);
+
+			for (usize i = 0; i < desc_set_count; i++) {
+				cpu_copy_buffer(
+					desc_sets[i].descriptors,              desc_sets[i].count,
+					&this->descriptor_sets[i].descriptors, &this->descriptor_sets[i].count);
+			}
 
 			video->pipelines.push_back(this);
 		}
@@ -1022,190 +1026,195 @@ namespace vkr {
 		color_blending.attachmentCount = 1;
 		color_blending.pAttachments = &color_blend_attachment;
 
-		/* Set up uniform buffers and descriptor sets. */
-		handle->uniforms = new impl_UniformBuffer[uniform_count];
-		handle->sampler_bindings = new impl_SamplerBinding[sampler_binding_count];
-		handle->temp_sets = new VkDescriptorSet[sampler_binding_count + 1];
+		/* Count the descriptors of different types to create a descriptor pool. */
+		sampler_count = uniform_count = 0;
+		for (usize i = 0; i < desc_set_count; i++) {
+			auto set = desc_sets + i;
 
-		auto layout_bindings = new VkDescriptorSetLayoutBinding[uniform_count];
-		for (usize i = 0; i < uniform_count; i++) {
-			memset(layout_bindings + i, 0, sizeof(*layout_bindings));
+			for (usize ii = 0; ii < set->count; ii++) {
+				auto desc = set->descriptors + ii;
 
-			layout_bindings[i].binding = uniforms[i].binding;
-			layout_bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			layout_bindings[i].descriptorCount = 1;
-			layout_bindings[i].stageFlags = uniforms[i].stage == Stage::vertex ?
-				VK_SHADER_STAGE_VERTEX_BIT :
-				VK_SHADER_STAGE_FRAGMENT_BIT;
-			layout_bindings[i].pImmutableSamplers = null;
-		}
-
-		auto s_layout_bindings = new VkDescriptorSetLayoutBinding[sampler_binding_count];
-		u32 sampler_count = 0;
-		for (usize i = 0; i < sampler_binding_count; i++)  {
-			memset(s_layout_bindings + i, 0, sizeof(*s_layout_bindings));
-
-			bool dup = false;
-			for (u32 ii = 0; ii < sampler_count; ii++) {
-				if (sampler_bindings[i].binding == s_layout_bindings[ii].binding) {
-					dup = true;
-					break;
+				switch (desc->resource.type) {
+					case ResourcePointer::Type::texture:
+					case ResourcePointer::Type::framebuffer_output:
+						sampler_count++;
+						break;
+					case ResourcePointer::Type::uniform_buffer:
+						uniform_count++;
+						break;
+					default:
+						abort_with("Invalid resource pointer type on descriptor.");
+						break;
 				}
 			}
-			if (dup) { continue; }
-
-			u32 idx = sampler_count++;
-			s_layout_bindings[idx].binding = sampler_bindings[i].binding;
-			s_layout_bindings[idx].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			s_layout_bindings[idx].descriptorCount = 1;
-			s_layout_bindings[idx].stageFlags = sampler_bindings[i].stage == Stage::vertex ?
-				VK_SHADER_STAGE_VERTEX_BIT :
-				VK_SHADER_STAGE_FRAGMENT_BIT;
-			s_layout_bindings[idx].pImmutableSamplers = null;
 		}
 
-		VkDescriptorSetLayoutCreateInfo layout_info{};
-		layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layout_info.bindingCount = uniform_count;
-		layout_info.pBindings = layout_bindings;
+		/* Create the descriptor pool. */
+		VkDescriptorPoolSize pool_sizes[2];
+		usize pool_size_count = 0;
+		if (uniform_count > 0) {
+			auto idx = pool_size_count++;
 
-		if (vkCreateDescriptorSetLayout(video->handle->device, &layout_info, null, &handle->descriptor_set_layout) != VK_SUCCESS) {
-			abort_with("Failed to create descriptor set layout.");
+			pool_sizes[idx].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			pool_sizes[idx].descriptorCount = max_frames_in_flight * (u32)uniform_count;
 		}
 
-		VkDescriptorSetLayoutCreateInfo s_layout_info{};
-		s_layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		s_layout_info.bindingCount = sampler_count;
-		s_layout_info.pBindings = s_layout_bindings;
+		if (sampler_count > 0) {
+			auto idx = pool_size_count++;
 
-		if (vkCreateDescriptorSetLayout(video->handle->device, &s_layout_info, null, &handle->sampler_desc_set_layout) != VK_SUCCESS) {
-			abort_with("Failed to create descriptor set layout.");
+			pool_sizes[idx].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			pool_sizes[idx].descriptorCount = max_frames_in_flight * (u32)sampler_count;
 		}
-
-		/* Create descriptor pool. */
-		VkDescriptorPoolSize pool_sizes[] = {
-			{
-				.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-				.descriptorCount = max_frames_in_flight * (u32)uniform_count
-			},
-			{
-				.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.descriptorCount = max_frames_in_flight * (u32)sampler_binding_count * 10
-			}
-		};	
 
 		VkDescriptorPoolCreateInfo pool_info{};
 		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		pool_info.poolSizeCount = 2;
+		pool_info.poolSizeCount = (u32)pool_size_count;
 		pool_info.pPoolSizes = pool_sizes;
 		pool_info.maxSets =
 			(max_frames_in_flight * uniform_count) +
-			(max_frames_in_flight * sampler_binding_count);
+			(max_frames_in_flight * sampler_count);
 
 		if (vkCreateDescriptorPool(video->handle->device, &pool_info, null, &handle->descriptor_pool) != VK_SUCCESS) {
-			abort_with("Failed to create descriptor pool.");
+			abort_with("Failed to create the descriptor pool.");
 		}
 
-		/* Create descriptor set. */
-		VkDescriptorSetLayout layouts[max_frames_in_flight];
-		for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
-			layouts[ii] = handle->descriptor_set_layout;
-		}
+		handle->desc_sets = new impl_DescriptorSet[desc_set_count]();
+		handle->uniforms = new impl_UniformBuffer[uniform_count]();
+		auto set_layouts = new VkDescriptorSetLayout[desc_set_count]();
 
-		VkDescriptorSetAllocateInfo desc_set_alloc_info{};
-		desc_set_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		desc_set_alloc_info.descriptorPool = handle->descriptor_pool;
-		desc_set_alloc_info.descriptorSetCount = max_frames_in_flight;
-		desc_set_alloc_info.pSetLayouts = layouts;
+		for (usize i = 0; i < desc_set_count; i++) {
+			auto set = desc_sets + i;
+			auto v_set = handle->desc_sets + i;
 
-		if (vkAllocateDescriptorSets(video->handle->device, &desc_set_alloc_info, handle->descriptor_sets) != VK_SUCCESS) {
-			abort_with("Failed to allocate uniform buffer descriptor sets.");
-		}
+			auto layout_bindings = new VkDescriptorSetLayoutBinding[set->count]();
 
-		for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
-			layouts[ii] = handle->sampler_desc_set_layout;
-		}
+			for (usize ii = 0; ii < set->count; ii++) {
+				auto desc = set->descriptors + ii;
 
-		/* Create sampler descriptor sets. */
-		for (usize i = 0; i < sampler_binding_count; i++) {
-			VkDescriptorSetAllocateInfo set_alloc_info{};
-			set_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-			set_alloc_info.descriptorPool = handle->descriptor_pool;
-			set_alloc_info.descriptorSetCount = max_frames_in_flight;
-			set_alloc_info.pSetLayouts = layouts;
+				auto lb = layout_bindings + ii;
 
-			if (vkAllocateDescriptorSets(video->handle->device, &set_alloc_info, handle->sampler_bindings[i].descriptor_sets) != VK_SUCCESS) {
-				abort_with("Failed to allocate sampler descriptor sets.");
-			}
-		}
+				VkDescriptorType type;
 
-		for (usize i = 0; i < uniform_count; i++) {
-			handle->uniforms[i].ptr = uniforms[i].ptr;
-			handle->uniforms[i].size = uniforms[i].size;
-
-			VkDeviceSize buffer_size = handle->uniforms[i].size;
-
-			/* Create uniform buffers. */
-			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
-				new_buffer(video->handle, buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-					VMA_ALLOCATION_CREATE_MAPPED_BIT,
-					handle->uniforms[i].uniform_buffers + ii,
-					handle->uniforms[i].uniform_buffer_memories + ii);
-			}
-
-			/* Write the descriptor sets */
-			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
-				VkDescriptorBufferInfo buffer_info{};
-				buffer_info.buffer = handle->uniforms[i].uniform_buffers[ii];
-				buffer_info.offset = 0;
-				buffer_info.range = uniforms[i].size;
-
-				VkWriteDescriptorSet desc_write{};
-				desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				desc_write.dstSet = handle->descriptor_sets[ii];
-				desc_write.dstBinding = uniforms[i].binding;
-				desc_write.dstArrayElement = 0;
-				desc_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-				desc_write.descriptorCount = 1;
-				desc_write.pBufferInfo = &buffer_info;
-
-				vkUpdateDescriptorSets(video->handle->device, 1, &desc_write, 0, null);
-			}
-		}
-
-		/* Write the sampler descriptor sets. */
-		for (usize i = 0; i < sampler_binding_count; i++) {
-			auto sampler_binding = sampler_bindings + i;
-
-			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
-				VkDescriptorImageInfo image_info{};
-
-				if (sampler_binding->type == SamplerBinding::Type::texture) {
-					auto texture = reinterpret_cast<Texture*>(sampler_binding->object);
-
-					image_info.imageView = texture->handle->view;
-					image_info.sampler   = texture->handle->sampler;
-					image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				} else if (sampler_binding->type == SamplerBinding::Type::framebuffer_output) {
-					auto fb = reinterpret_cast<Framebuffer*>(sampler_binding->object);
-
-					image_info.imageView = fb->handle->colors[sampler_binding->attachment].image_views[ii];
-					image_info.sampler   = fb->handle->sampler;
-					image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				switch (desc->resource.type) {
+					case ResourcePointer::Type::texture:
+					case ResourcePointer::Type::framebuffer_output:
+						lb->descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+						break;
+					case ResourcePointer::Type::uniform_buffer:
+						lb->descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+						break;
+					default:
+						abort_with("Invalid resource pointer type on descriptor.");
+						break;
 				}
 
-				VkWriteDescriptorSet desc_write{};
-				desc_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				desc_write.dstSet = handle->sampler_bindings[i].descriptor_sets[ii];
-				desc_write.dstBinding = sampler_bindings[i].binding;
-				desc_write.dstArrayElement = 0;
-				desc_write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-				desc_write.descriptorCount = 1;
-				desc_write.pImageInfo = &image_info;
-
-				vkUpdateDescriptorSets(video->handle->device, 1, &desc_write, 0, null);
+				lb->binding = desc->binding;
+				lb->descriptorCount = 1;
+				lb->stageFlags = desc->stage == Stage::vertex ?
+					VK_SHADER_STAGE_VERTEX_BIT :
+					VK_SHADER_STAGE_FRAGMENT_BIT;
 			}
+
+			VkDescriptorSetLayoutCreateInfo layout_info{};
+			layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+			layout_info.bindingCount = (u32)set->count;
+			layout_info.pBindings = layout_bindings;
+
+			if (vkCreateDescriptorSetLayout(video->handle->device, &layout_info, null, &v_set->layout) != VK_SUCCESS) {
+				abort_with("Failed to create the descriptor set layout.");
+			}
+
+			set_layouts[i] = v_set->layout;
+
+			/* Each descriptor set for each frame in flight uses
+			 * the same descriptor set layout. */
+			VkDescriptorSetLayout layouts[max_frames_in_flight];
+			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
+				layouts[ii] = v_set->layout;
+			}
+
+			VkDescriptorSetAllocateInfo alloc_info{};
+			alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			alloc_info.descriptorPool = handle->descriptor_pool;
+			alloc_info.descriptorSetCount = max_frames_in_flight;
+			alloc_info.pSetLayouts = layouts;
+
+			if (vkAllocateDescriptorSets(video->handle->device, &alloc_info, v_set->sets) != VK_SUCCESS) {
+				abort_with("Failed to allocate descriptor sets.");
+			}
+
+			/* Write the descriptor set and create uniform buffers if necessary. */
+			for (usize ii = 0, ui = 0; ii < set->count; ii++) {
+				VkWriteDescriptorSet desc_writes[max_frames_in_flight] = {};
+
+				usize uniform_index;
+
+				if (set->descriptors[ii].resource.type == ResourcePointer::Type::uniform_buffer) {
+					uniform_index = ui++;
+
+					handle->uniforms[uniform_index].ptr  = set->descriptors[ii].resource.uniform.ptr;
+					handle->uniforms[uniform_index].size = set->descriptors[ii].resource.uniform.size;
+				}
+
+				for (usize j = 0; j < max_frames_in_flight; j++) {
+					auto write = desc_writes + j;
+
+					write->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					write->dstSet = v_set->sets[j];
+					write->dstBinding = set->descriptors[ii].binding;
+					write->dstArrayElement = 0;
+					write->descriptorCount = 1;
+
+					VkDescriptorImageInfo image_info;
+					VkDescriptorBufferInfo buffer_info;
+
+					switch (set->descriptors[ii].resource.type) {
+						case ResourcePointer::Type::texture: {
+							auto t = set->descriptors[ii].resource.texture.ptr;
+
+							VkDescriptorImageInfo image_info{};
+							image_info.imageView   = t->handle->view;
+							image_info.sampler     = t->handle->sampler;
+							image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+							write->descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+						} break;
+						case ResourcePointer::Type::framebuffer_output: {	
+							auto fb = set->descriptors[ii].resource.framebuffer.ptr;
+							auto attachment = set->descriptors[ii].resource.framebuffer.attachment;
+
+							image_info.imageView   = fb->handle->colors[attachment].image_views[j];
+							image_info.sampler     = fb->handle->sampler;
+							image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+							write->descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+							write->pImageInfo = &image_info;
+						} break;
+						case ResourcePointer::Type::uniform_buffer: {
+							new_buffer(video->handle, (VkDeviceSize)handle->uniforms[uniform_index].size,
+								VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+								VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+								VMA_ALLOCATION_CREATE_MAPPED_BIT,
+								handle->uniforms[uniform_index].buffers + j,
+								handle->uniforms[uniform_index].memories + j);
+
+							buffer_info.buffer = handle->uniforms[uniform_index].buffers[j];
+							buffer_info.offset = 0;
+							buffer_info.range = handle->uniforms[uniform_index].size;
+
+							write->descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+							write->pBufferInfo = &buffer_info;
+						} break;
+						default:
+							abort_with("Invalid resource pointer type on descriptor.");
+							break;
+					}
+				}
+
+				vkUpdateDescriptorSets(video->handle->device, max_frames_in_flight, desc_writes, 0, null);
+			}
+
+			delete[] layout_bindings;
 		}
 
 		auto pc_ranges = new VkPushConstantRange[pcrange_count];
@@ -1218,14 +1227,9 @@ namespace vkr {
 			pc_ranges[i].size = pcranges[i].size;
 		}
 
-		VkDescriptorSetLayout set_layouts[] = {
-			handle->descriptor_set_layout,
-			handle->sampler_desc_set_layout
-		};
-
 		VkPipelineLayoutCreateInfo pipeline_layout_info{};
 		pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipeline_layout_info.setLayoutCount = 2;
+		pipeline_layout_info.setLayoutCount = (u32)desc_set_count;
 		pipeline_layout_info.pSetLayouts = set_layouts;
 		pipeline_layout_info.pushConstantRangeCount = pcrange_count;
 		pipeline_layout_info.pPushConstantRanges = pc_ranges;
@@ -1233,10 +1237,6 @@ namespace vkr {
 		if (vkCreatePipelineLayout(video->handle->device, &pipeline_layout_info, null, &handle->pipeline_layout) != VK_SUCCESS) {
 			abort_with("Failed to create pipeline layout.");
 		}
-
-		delete[] pc_ranges;
-		delete[] layout_bindings;
-		delete[] s_layout_bindings;
 
 		VkGraphicsPipelineCreateInfo pipeline_info{};
 		pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1259,6 +1259,8 @@ namespace vkr {
 		}
 
 		delete[] vk_attribs;
+		delete[] pc_ranges;
+		delete[] set_layouts;
 	}
 
 	Pipeline::~Pipeline() {
@@ -1266,26 +1268,34 @@ namespace vkr {
 
 		if (!is_recreating) {
 			delete[] attribs;
-			delete[] uniforms;
-			delete[] sampler_bindings;
+
+			for (usize i = 0; i < descriptor_set_count; i++) {
+				delete[] descriptor_sets[i].descriptors;
+			}
+
+			delete[] descriptor_sets;
+
 			delete[] pcranges;
 		}
 
-		for (u32 i = 0; i < uniform_count; i++) {
+		for (usize i = 0; i < uniform_count; i++) {
 			for (u32 ii = 0; ii < max_frames_in_flight; ii++) {
 				vmaDestroyBuffer(video->handle->allocator,
-						handle->uniforms[i].uniform_buffers[ii],
-						handle->uniforms[i].uniform_buffer_memories[ii]);
+						handle->uniforms[i].buffers[ii],
+						handle->uniforms[i].memories[ii]);
 			}
 		}
 
-		vkDestroyDescriptorPool(video->handle->device, handle->descriptor_pool, null);
-		vkDestroyDescriptorSetLayout(video->handle->device, handle->descriptor_set_layout, null);
-		vkDestroyDescriptorSetLayout(video->handle->device, handle->sampler_desc_set_layout, null);
+		for (usize i = 0; i < descriptor_set_count; i++) {
+			auto set = handle->desc_sets + i;
 
+			vkDestroyDescriptorSetLayout(video->handle->device, set->layout, null);
+		}
+
+		vkDestroyDescriptorPool(video->handle->device, handle->descriptor_pool, null);
+
+		delete[] handle->desc_sets;
 		delete[] handle->uniforms;
-		delete[] handle->sampler_bindings;
-		delete[] handle->temp_sets;
 
 		vkDestroyPipeline(video->handle->device, handle->pipeline, null);
 		vkDestroyPipelineLayout(video->handle->device, handle->pipeline_layout, null);
@@ -1300,11 +1310,12 @@ namespace vkr {
 
 		/* Update the uniform buffers. */
 		for (u32 i = 0; i < uniform_count; i++) {
+			auto u = handle->uniforms + i;
+
 			void* uniform_data;
-			vmaMapMemory(video->handle->allocator, handle->uniforms[i].uniform_buffer_memories[video->current_frame],
-				&uniform_data);
-			memcpy(uniform_data, handle->uniforms[i].ptr, handle->uniforms[i].size);
-			vmaUnmapMemory(video->handle->allocator, handle->uniforms[i].uniform_buffer_memories[video->current_frame]);
+			vmaMapMemory(video->handle->allocator, u->memories[video->current_frame], &uniform_data);
+			memcpy(uniform_data, u->ptr, u->size);
+			vmaUnmapMemory(video->handle->allocator, u->memories[video->current_frame]);
 		}
 
 		VkRenderPassBeginInfo render_pass_info{};
@@ -1318,10 +1329,6 @@ namespace vkr {
 
 		vkCmdBeginRenderPass(video->handle->command_buffers[video->current_frame], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, handle->pipeline);
-
-		vkCmdBindDescriptorSets(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
-			handle->pipeline_layout, 0, 1,
-			&handle->descriptor_sets[video->current_frame], 0, null);
 	}
 
 	void Pipeline::end() {
@@ -1344,16 +1351,12 @@ namespace vkr {
 		offset, size, ptr);
 	}
 
-	void Pipeline::bind_samplers(u32* indices, usize index_count) {
+	void Pipeline::bind_descriptor_set(usize index) {
 		if (video->skip_frame) { return; }
 
-		for (usize i = 0; i < index_count; i++) {
-			handle->temp_sets[i] = handle->sampler_bindings[indices[i]].descriptor_sets[video->current_frame];
-		}
-
 		vkCmdBindDescriptorSets(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
-			handle->pipeline_layout, 1, index_count,
-			handle->temp_sets, 0, null);
+			handle->pipeline_layout, index, 1,
+			handle->desc_sets[index].sets + video->current_frame, 0, null);
 	}
 
 	void Pipeline::recreate() {
@@ -1362,8 +1365,8 @@ namespace vkr {
 		/* The C++ Gods hate me. The C# Gods hate me even more. */
 		this->~Pipeline();
 		new(this) Pipeline(video, flags, shader, stride,
-			attribs, attrib_count, framebuffer, uniforms, uniform_count,
-			sampler_bindings, sampler_binding_count, pcranges, pcrange_count, true);
+			attribs, attrib_count, framebuffer, descriptor_sets, descriptor_set_count,
+			pcranges, pcrange_count, true);
 
 		is_recreating = false;
 	}

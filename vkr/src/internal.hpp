@@ -54,18 +54,17 @@ namespace vkr {
 		VmaAllocation memory;
 	};
 
-	struct impl_UniformBuffer {
-		VkBuffer uniform_buffers[max_frames_in_flight];
-		VmaAllocation uniform_buffer_memories[max_frames_in_flight];
-		void* ptr;
-		usize size;
+	struct impl_DescriptorSet {
+		VkDescriptorSetLayout layout;
+		VkDescriptorSet       sets[max_frames_in_flight];
 	};
 
-	struct impl_SamplerBinding {
-		Texture* texture;
-		u32 binding;
+	struct impl_UniformBuffer {
+		VkBuffer buffers[max_frames_in_flight];
+		VmaAllocation memories[max_frames_in_flight];
 
-		VkDescriptorSet descriptor_sets[max_frames_in_flight];
+		void* ptr;
+		usize size;
 	};
 
 	struct impl_Pipeline {
@@ -74,17 +73,8 @@ namespace vkr {
 
 		VkDescriptorPool descriptor_pool;
 
-		VkDescriptorSetLayout descriptor_set_layout;
+		impl_DescriptorSet* desc_sets;
 		impl_UniformBuffer* uniforms;
-		VkDescriptorSet descriptor_sets[max_frames_in_flight];
-
-		VkDescriptorSetLayout sampler_desc_set_layout;
-		impl_SamplerBinding* sampler_bindings;
-
-		/* Used to push descriptor sets into to be bound with
-		 * vkCmdBindDescriptorSets to avoid re-creating a vector
-		 * every frame or something equally dumb. */
-		VkDescriptorSet* temp_sets;
 	};
 
 	struct impl_Attachment {

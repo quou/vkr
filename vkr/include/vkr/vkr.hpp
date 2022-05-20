@@ -145,6 +145,7 @@ namespace vkr {
 		};
 
 		struct Attribute {
+			const char* name;
 			u32 location;
 			usize offset;
 
@@ -179,6 +180,47 @@ namespace vkr {
 			u32 attachment;
 		};
 
+		struct ResourcePointer {
+			enum class Type {
+				texture,
+				framebuffer_output,
+				uniform_buffer
+			} type;
+
+			union {
+				struct {
+					void* ptr;
+					usize size;
+				} uniform;
+
+				struct {
+					Texture* ptr;
+				} texture;
+
+				struct {
+					Framebuffer* ptr;
+					u32 attachment;
+				} framebuffer;
+			};
+		};
+
+		struct Descriptor {
+			const char* name;
+
+			u32 binding;
+
+			Stage stage;
+
+			ResourcePointer resource;
+		};
+
+		struct DescriptorSet {
+			const char* name;
+
+			Descriptor* descriptors;
+			usize count;
+		};
+
 		struct PushConstantRange {
 			const char* name;
 			usize size;
@@ -195,8 +237,7 @@ namespace vkr {
 		Pipeline(VideoContext* video, Flags flags, Shader* shader, usize stride,
 			Attribute* attribs, usize attrib_count,
 			Framebuffer* framebuffer,
-			UniformBuffer* uniforms = null, usize uniform_count = 0,
-			SamplerBinding* sampler_bindings = null, usize sampler_binding_count = 0,
+			DescriptorSet* desc_sets = null, usize desc_set_count = 0,
 			PushConstantRange* pcranges = null, usize pcrange_count = 0, bool is_recreating = false);
 		virtual ~Pipeline();
 
@@ -204,7 +245,7 @@ namespace vkr {
 		void end();
 
 		void push_constant(Stage stage, const void* ptr, usize size, usize offset = 0);
-		void bind_samplers(u32* indices, usize index_count);
+		void bind_descriptor_set(usize index);
 
 		template <typename T>
 		void push_constant(Stage stage, const T& c, usize offset = 0) {
@@ -220,13 +261,12 @@ namespace vkr {
 		usize stride;
 		Attribute* attribs;
 		usize attrib_count;
-		UniformBuffer* uniforms;
-	       	usize uniform_count;
-		SamplerBinding* sampler_bindings;
-		usize sampler_binding_count;
-		usize fb_out_binding_count;
+		DescriptorSet* descriptor_sets;
+		usize descriptor_set_count;
 		PushConstantRange* pcranges;
 		usize pcrange_count;
+
+		usize uniform_count, sampler_count;
 	};
 
 	inline Pipeline::Flags operator|(Pipeline::Flags a, Pipeline::Flags b) {

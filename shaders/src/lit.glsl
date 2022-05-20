@@ -62,8 +62,8 @@ layout (location = 0) in VertexOut {
 	vec2 uv;
 } fs_in;
 
-layout (set = 1, binding = 0) uniform sampler2D diffuse_map;
-layout (set = 1, binding = 1) uniform sampler2D normal_map;
+//layout (set = 1, binding = 0) uniform sampler2D diffuse_map;
+//layout (set = 1, binding = 1) uniform sampler2D normal_map;
 
 vec3 compute_point_light(vec3 normal, vec3 view_dir, PointLight light) {
 	vec3 light_dir = normalize(light.position - fs_in.world_pos);
@@ -89,8 +89,10 @@ vec3 compute_point_light(vec3 normal, vec3 view_dir, PointLight light) {
 }
 
 void main() {
-	vec3 normal = texture(normal_map, fs_in.uv).rgb * 2.0 - 1.0;
-	normal = normalize(fs_in.tbn * normal);
+//	vec3 normal = texture(normal_map, fs_in.uv).rgb * 2.0 - 1.0;
+//	normal = normalize(fs_in.tbn * normal);
+
+	vec3 normal = normalize(fs_in.tbn[2]);
 
 	vec3 view_dir = normalize(data.camera_pos - fs_in.world_pos);
 
@@ -100,6 +102,7 @@ void main() {
 		lighting_result += compute_point_light(normal, view_dir, data.point_lights[i]);
 	}
 
-	color = texture(diffuse_map, fs_in.uv) * vec4(lighting_result, 1.0);
+//	color = texture(diffuse_map, fs_in.uv) * vec4(lighting_result, 1.0);
+	color = vec4(lighting_result, 1.0);
 }
 #end FRAGMENT

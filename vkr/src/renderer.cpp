@@ -21,34 +21,39 @@ namespace vkr {
 			app->get_size(), attachments, 2);
 
 		Pipeline::Attribute attribs[] = {
-			{ /* vec3 position. */
+			{
+				.name     = "position",
 				.location = 0,
 				.offset   = offsetof(Vertex, position),
 				.type     = Pipeline::Attribute::Type::float3
 			},
-			{ /* vec2 UV. */
+			{
+				.name     = "uv",
 				.location = 1,
 				.offset   = offsetof(Vertex, uv),
 				.type     = Pipeline::Attribute::Type::float2
 			},
-			{ /* vec3 normal. */
+			{
+				.name     = "normal",
 				.location = 2,
 				.offset   = offsetof(Vertex, normal),
 				.type     = Pipeline::Attribute::Type::float3
 			},
-			{ /* vec3 tangent. */
+			{
+				.name     = "tangent",
 				.location = 3,
 				.offset   = offsetof(Vertex, tangent),
 				.type     = Pipeline::Attribute::Type::float3
 			},
-			{ /* vec3 bitangnet. */
+			{
+				.name     = "bitangent",
 				.location = 4,
 				.offset   = offsetof(Vertex, bitangent),
 				.type     = Pipeline::Attribute::Type::float3
 			},
 		};
 
-		Pipeline::UniformBuffer ubuffers[] = {
+	/*	Pipeline::UniformBuffer ubuffers[] = {
 			{
 				.name    = "vertex_uniform_buffer",
 				.binding = 0,
@@ -63,7 +68,7 @@ namespace vkr {
 				.size    = sizeof(f_ub),
 				.stage   = Pipeline::Stage::fragment
 			},
-		};
+		};*/
 
 		Pipeline::PushConstantRange pc[] = {
 			{
@@ -74,23 +79,47 @@ namespace vkr {
 			}
 		};
 
+		Pipeline::Descriptor uniform_descs[2];
+		uniform_descs[0].name = "vertex_uniform_buffer";
+		uniform_descs[0].binding = 0;
+		uniform_descs[0].stage = Pipeline::Stage::vertex;
+		uniform_descs[0].resource.type = Pipeline::ResourcePointer::Type::uniform_buffer;
+		uniform_descs[0].resource.uniform.ptr  = &v_ub;
+		uniform_descs[0].resource.uniform.size = sizeof(v_ub);
+
+		uniform_descs[1].name = "vertex_uniform_buffer";
+		uniform_descs[1].binding = 1;
+		uniform_descs[1].stage = Pipeline::Stage::fragment;
+		uniform_descs[1].resource.type = Pipeline::ResourcePointer::Type::uniform_buffer;
+		uniform_descs[1].resource.uniform.ptr  = &f_ub;
+		uniform_descs[1].resource.uniform.size = sizeof(f_ub);
+
+		Pipeline::DescriptorSet desc_sets[] = {
+			{
+				.name = "uniforms",
+				.descriptors = uniform_descs,
+				.count = 2
+			}
+		};
+
 		usize sampler_binding_count = material_count * Material::get_texture_count();
 		auto samplers = new Pipeline::SamplerBinding[sampler_binding_count];
 
-		for (usize i = 0; i < sampler_binding_count; i += Material::get_texture_count()) {
+		usize mat_idx = 0;
+		for (usize i = 0; i < sampler_binding_count; i += Material::get_texture_count(), mat_idx++) {
 			auto albedo_binding = samplers + i;
 			auto normal_binding = samplers + i + 1;
 
 			albedo_binding->name = "albedo";
 			albedo_binding->binding = 0;
 			albedo_binding->type = Pipeline::SamplerBinding::Type::texture;
-			albedo_binding->object = materials[i].albedo;
+			albedo_binding->object = materials[mat_idx].albedo;
 			albedo_binding->stage = Pipeline::Stage::fragment;
 
 			normal_binding->name = "normal";
 			normal_binding->binding = 1;
 			normal_binding->type = Pipeline::SamplerBinding::Type::texture;
-			normal_binding->object = materials[i].normal;
+			normal_binding->object = materials[mat_idx].normal;
 			normal_binding->stage = Pipeline::Stage::fragment;
 		};
 
@@ -100,13 +129,11 @@ namespace vkr {
 			shaders.lit,
 			sizeof(Vertex),
 			attribs, 5,
-			scene_fb,
-			ubuffers, 2,
-			samplers, sampler_binding_count,
+			app->get_default_framebuffer(),
+			desc_sets, 1,
 			pc, 1);
 
-		abort_with("hi");
-
+#if 0
 		Pipeline::Attribute post_attribs[] = {
 			{ /* vec2 position. */
 				.location = 0,
@@ -129,8 +156,8 @@ namespace vkr {
 		};
 
 		fullscreen_tri = new VertexBuffer(video, tri_verts, sizeof(tri_verts));
-
-		Pipeline::UniformBuffer tonemap_ubuffers[] = {
+#endif
+	/*	Pipeline::UniformBuffer tonemap_ubuffers[] = {
 			{
 				.name    = "fragment_uniform_buffer",
 				.binding = 0,
@@ -161,13 +188,13 @@ namespace vkr {
 			tonemap_ubuffers, 1,
 			tonemap_samplers, 1);
 
-		delete[] samplers;
+		delete[] samplers;*/
 	}
 
 	Renderer3D::~Renderer3D() {
-		delete fullscreen_tri;
+		//delete fullscreen_tri;
 		delete scene_fb;
-		delete tonemap_pip;
+	//	delete tonemap_pip;
 		delete scene_pip;
 	}
 
@@ -204,7 +231,7 @@ namespace vkr {
 	void Renderer3D::end() {
 		scene_pip->end();
 
-		tonemap_pip->begin();
+	/*	tonemap_pip->begin();
 
 		u32 samplers[] = { 0 };
 
@@ -213,7 +240,7 @@ namespace vkr {
 		fullscreen_tri->bind();
 		fullscreen_tri->draw(3);
 
-		tonemap_pip->end();
+		tonemap_pip->end();*/
 	}
 
 	void Renderer3D::draw(Model3D* model, m4f transform, usize material_id) {
@@ -221,12 +248,8 @@ namespace vkr {
 
 		v_pc.transform = transform;
 		for (auto mesh : model->meshes) {
-			u32 samplers[] = {
-				(u32)((material_id + 0) * Material::get_texture_count()) /* albedo */
-			};
-
 			scene_pip->push_constant(Pipeline::Stage::vertex, v_pc);
-			scene_pip->bind_samplers(samplers, Material::get_texture_count());
+			scene_pip->bind_descriptor_set(0);
 			mesh->vb->bind();
 			mesh->ib->draw();
 		}
