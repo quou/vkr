@@ -510,7 +510,7 @@ namespace vkr {
 
 		i32 usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 		if (can_sample) {
-			usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+			usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
 		}
 
 		new_image(handle, size,
@@ -1182,7 +1182,7 @@ namespace vkr {
 						} break;
 						case ResourcePointer::Type::framebuffer_output: {	
 							auto fb = set->descriptors[ii].resource.framebuffer.ptr;
-							auto attachment = set->descriptors[ii].resource.framebuffer.attachment;	
+							auto attachment = set->descriptors[ii].resource.framebuffer.attachment;
 
 							image_info.imageView   = fb->handle->attachment_map[attachment]->image_views[j];
 							image_info.sampler     = fb->handle->sampler;
@@ -1318,22 +1318,15 @@ namespace vkr {
 			vmaUnmapMemory(video->handle->allocator, u->memories[video->current_frame]);
 		}
 
-		VkRenderPassBeginInfo render_pass_info{};
-		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		render_pass_info.renderPass = framebuffer->handle->render_pass;
-		render_pass_info.framebuffer = framebuffer->handle->get_current_framebuffer(video->image_id, video->current_frame);
-		render_pass_info.renderArea.offset = { 0, 0 };
-		render_pass_info.renderArea.extent = VkExtent2D { (u32)framebuffer->get_scaled_size().x, (u32)framebuffer->get_scaled_size().y };
-		render_pass_info.clearValueCount = framebuffer->handle->clear_color_count;
-		render_pass_info.pClearValues = framebuffer->handle->clear_colors;
+		framebuffer->begin();
 
-		vkCmdBeginRenderPass(video->handle->command_buffers[video->current_frame], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, handle->pipeline);
 	}
 
 	void Pipeline::end() {
 		if (video->skip_frame) { return; }
-		vkCmdEndRenderPass(video->handle->command_buffers[video->current_frame]);
+
+		framebuffer->end();
 	}
 
 	void Pipeline::push_constant(Stage stage, const void* ptr, usize size, usize offset) {
@@ -1446,9 +1439,9 @@ namespace vkr {
 				ca_descs[idx].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 				ca_descs[idx].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 				ca_descs[idx].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-				
+	
 				if (flags & Flags::headless) {
-					ca_descs[idx].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					ca_descs[idx].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 				} else {
 					ca_descs[idx].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 				}
@@ -1609,6 +1602,7 @@ namespace vkr {
 
 			for (usize i = 0; i < color_attachment_count; i++) {
 				auto attachment = handle->colors + i;
+				attachment->type = Attachment::Type::color;
 
 				auto fmt = color_formats[i];
 
@@ -1629,13 +1623,14 @@ namespace vkr {
 
 				for (u32 i = 0; i < max_frames_in_flight; i++) {
 					new_depth_resources(video->handle, &handle->depth.images[i],
-						&handle->depth.image_views[i], &handle->depth.image_memories[i], size * scale);
+						&handle->depth.image_views[i], &handle->depth.image_memories[i], size * scale, true);
+					handle->depth.type = Attachment::Type::depth;
 				}
 			}
 
 			auto image_attachments = new VkImageView[attachment_count];
 
-			/* Create depth buffers and framebuffers, one for each frame in flight. */
+			/* Create framebuffers, one for each frame in flight. */
 			for (u32 i = 0; i < max_frames_in_flight; i++) {
 				if (use_depth && color_attachment_count > 0) {
 					for (usize ii = 0; ii < depth_index; ii++) {
@@ -1740,7 +1735,80 @@ namespace vkr {
 		new(this) Framebuffer(video, flags, new_size, attachments, attachment_count, scale, true);
 
 		is_recreating = false;
+	}
 
+	void Framebuffer::begin() {
+		if (flags & Flags::headless) {
+			/* Transition the image layouts into layouts for writing to. */
+
+			for (auto& pair : handle->attachment_map) {
+				auto attachment = pair.second;
+
+				auto new_layout =
+					attachment->type == Attachment::Type::color ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL :
+					VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+
+				VkImageMemoryBarrier barrier{};
+				barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+				barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+				barrier.image = attachment->images[video->current_frame];
+				barrier.newLayout = new_layout;
+				barrier.subresourceRange = { attachment->get_aspect_flags(), 0, 1, 0, 1};
+				barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				barrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+				barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+				vkCmdPipelineBarrier(video->handle->command_buffers[video->current_frame],
+					VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+					0, 0, null, 0, null, 1, &barrier);
+			}
+		}
+
+		VkRenderPassBeginInfo render_pass_info{};
+		render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		render_pass_info.renderPass = handle->render_pass;
+		render_pass_info.framebuffer = handle->get_current_framebuffer(video->image_id, video->current_frame);
+		render_pass_info.renderArea.offset = { 0, 0 };
+		render_pass_info.renderArea.extent = VkExtent2D { (u32)get_scaled_size().x, (u32)get_scaled_size().y };
+		render_pass_info.clearValueCount = handle->clear_color_count;
+		render_pass_info.pClearValues = handle->clear_colors;
+
+		vkCmdBeginRenderPass(video->handle->command_buffers[video->current_frame], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+	}
+
+	void Framebuffer::end() {
+		vkCmdEndRenderPass(video->handle->command_buffers[video->current_frame]);
+
+		if (flags & Flags::headless) {
+			/* Transition the image layouts into layouts so that they might b
+			 * sampled from a shader. */
+
+			for (auto& pair : handle->attachment_map) {
+				auto attachment = pair.second;
+
+				auto old_layout =
+					attachment->type == Attachment::Type::color ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL :
+					VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+
+				auto new_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+				VkImageMemoryBarrier barrier{};
+				barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+				barrier.oldLayout = old_layout;
+				barrier.image = attachment->images[video->current_frame];
+				barrier.newLayout = new_layout;
+				barrier.subresourceRange = { attachment->get_aspect_flags(), 0, 1, 0, 1};
+				barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+				barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+				vkCmdPipelineBarrier(video->handle->command_buffers[video->current_frame],
+					VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+					0, 0, null, 0, null, 1, &barrier);
+			}
+		}
 	}
 
 	Buffer::Buffer(VideoContext* video) : video(video) {

@@ -114,6 +114,9 @@ namespace vkr {
 		inline v2i get_scaled_size() const { return v2i((i32)((f32)size.x) * scale, (i32)((f32)size.y) * scale); }
 
 		void resize(v2i size);
+
+		void begin();
+		void end();
 	private:
 		Attachment* attachments;
 		usize attachment_count;

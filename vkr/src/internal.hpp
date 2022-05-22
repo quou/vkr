@@ -84,6 +84,11 @@ namespace vkr {
 		VkImage images[max_frames_in_flight];
 		VkImageView image_views[max_frames_in_flight];
 		VmaAllocation image_memories[max_frames_in_flight];
+
+		VkImageAspectFlags get_aspect_flags() {
+			return type == Framebuffer::Attachment::Type::color ? VK_IMAGE_ASPECT_COLOR_BIT :
+				VK_IMAGE_ASPECT_DEPTH_BIT;
+		}
 	};
 
 	struct impl_Framebuffer {
