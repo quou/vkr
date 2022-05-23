@@ -349,36 +349,8 @@ namespace vkr {
 		}
 	}
 
-	static void new_image(impl_VideoContext* handle, v2i size, VkFormat format,
-		VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags props,
-		VkImage* image, VmaAllocation* image_memory) {
-
-		VkImageCreateInfo create_info{};
-		create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		create_info.imageType = VK_IMAGE_TYPE_2D;
-		create_info.extent.width = (u32)size.x;
-		create_info.extent.height = (u32)size.y;
-		create_info.extent.depth = 1;
-		create_info.mipLevels = 1;
-		create_info.arrayLayers = 1;
-		create_info.format = format;
-		create_info.tiling = tiling;
-		create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		create_info.usage = usage;
-		create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-		create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-		VmaAllocationCreateInfo alloc_info{};
-		alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
-		alloc_info.requiredFlags = props;
-
-		if (vmaCreateImage(handle->allocator, &create_info, &alloc_info, image, image_memory, null) != VK_SUCCESS) {
-			abort_with("Failed to create image.");
-		}
-	}
-
 	static void change_image_layout(impl_VideoContext* handle, VkImage image, VkFormat format,
-		VkImageLayout src_layout, VkImageLayout dst_layout) {
+		VkImageLayout src_layout, VkImageLayout dst_layout, bool is_depth = false) {
 
 		auto command_buffer = begin_temp_command_buffer(handle);
 
@@ -409,13 +381,69 @@ namespace vkr {
 
 			src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		} else if (src_layout == VK_IMAGE_LAYOUT_UNDEFINED && dst_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+			barrier.srcAccessMask = 0;
+			barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+			src_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			dst_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		} else if (src_layout == VK_IMAGE_LAYOUT_UNDEFINED && dst_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+			barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+			barrier.srcAccessMask = 0;
+			barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+			src_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+			dst_stage = src_stage;
+		} else if (src_layout == VK_IMAGE_LAYOUT_UNDEFINED && dst_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+			if (is_depth) {
+				barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+			}
+
+			barrier.srcAccessMask = 0;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			src_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 		} else {
-			abort_with("Bad layout transition.");
+			abort_with("Bad layout transition. Use a custom call to vkCmdPipelineBarrier instead.");
 		}
 
 		vkCmdPipelineBarrier(command_buffer, src_stage, dst_stage, 0, 0, null, 0, null, 1, &barrier);
 
 		end_temp_command_buffer(handle, command_buffer);
+	}
+
+	static void new_image(impl_VideoContext* handle, v2i size, VkFormat format,
+		VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags props,
+		VkImage* image, VmaAllocation* image_memory, VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED, bool is_depth = false) {
+
+		VkImageCreateInfo create_info{};
+		create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		create_info.imageType = VK_IMAGE_TYPE_2D;
+		create_info.extent.width = (u32)size.x;
+		create_info.extent.height = (u32)size.y;
+		create_info.extent.depth = 1;
+		create_info.mipLevels = 1;
+		create_info.arrayLayers = 1;
+		create_info.format = format;
+		create_info.tiling = tiling;
+		create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		create_info.usage = usage;
+		create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+		create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		VmaAllocationCreateInfo alloc_info{};
+		alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
+		alloc_info.requiredFlags = props;
+
+		if (vmaCreateImage(handle->allocator, &create_info, &alloc_info, image, image_memory, null) != VK_SUCCESS) {
+			abort_with("Failed to create image.");
+		}
+
+		if (layout != VK_IMAGE_LAYOUT_UNDEFINED) {
+			change_image_layout(handle, *image, format, VK_IMAGE_LAYOUT_UNDEFINED, layout, is_depth);
+		}
 	}
 
 	static void copy_buffer_to_image(impl_VideoContext* handle, VkBuffer buffer, VkImage image, v2i size) {
@@ -499,8 +527,6 @@ namespace vkr {
 #undef fmt
 	}
 
-
-
 	static bool has_stencil_comp(VkFormat format) {
 		return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
@@ -513,9 +539,11 @@ namespace vkr {
 			usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
 		}
 
+		auto layout = can_sample ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+
 		new_image(handle, size,
 			depth_format, VK_IMAGE_TILING_OPTIMAL, usage,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory);
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory, layout, true);
 		*view = new_image_view(handle, *image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
 	}
 
@@ -1611,7 +1639,8 @@ namespace vkr {
 						fmt, VK_IMAGE_TILING_OPTIMAL,
 						VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-						attachment->images + ii, attachment->image_memories + ii);
+						attachment->images + ii, attachment->image_memories + ii,
+						VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 					attachment->image_views[ii] = new_image_view(video->handle, attachment->images[ii],
 						fmt, VK_IMAGE_ASPECT_COLOR_BIT);
 				}
@@ -1748,19 +1777,27 @@ namespace vkr {
 					attachment->type == Attachment::Type::color ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL :
 					VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
 
+				auto access = 
+					attachment->type == Attachment::Type::color ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT :
+					VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+				auto stage =
+					attachment->type == Attachment::Type::color ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT :
+					(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT);
+
 				VkImageMemoryBarrier barrier{};
 				barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 				barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 				barrier.image = attachment->images[video->current_frame];
 				barrier.newLayout = new_layout;
 				barrier.subresourceRange = { attachment->get_aspect_flags(), 0, 1, 0, 1};
-				barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-				barrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+				barrier.srcAccessMask = access;
+				barrier.dstAccessMask = access;
 				barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 				barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
 				vkCmdPipelineBarrier(video->handle->command_buffers[video->current_frame],
-					VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+					stage, stage,
 					0, 0, null, 0, null, 1, &barrier);
 			}
 		}
@@ -1793,19 +1830,27 @@ namespace vkr {
 
 				auto new_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+				auto prev_access = 
+					attachment->type == Attachment::Type::color ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT :
+					VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+				auto prev_stage =
+					attachment->type == Attachment::Type::color ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT :
+					(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT);
+
 				VkImageMemoryBarrier barrier{};
 				barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 				barrier.oldLayout = old_layout;
 				barrier.image = attachment->images[video->current_frame];
 				barrier.newLayout = new_layout;
 				barrier.subresourceRange = { attachment->get_aspect_flags(), 0, 1, 0, 1};
-				barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+				barrier.srcAccessMask = prev_access;
 				barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 				barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 				barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
 				vkCmdPipelineBarrier(video->handle->command_buffers[video->current_frame],
-					VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+					prev_stage, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 					0, 0, null, 0, null, 1, &barrier);
 			}
 		}
