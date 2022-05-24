@@ -263,7 +263,7 @@ namespace vkr {
 		delete default_texture;
 	}
 
-	void Renderer3D::begin() {
+	void Renderer3D::draw(ecs::World* world) {
 		auto size = app->get_size();
 
 		v3f camera_pos(0.0f, 0.0f, -5.0f);
@@ -274,47 +274,52 @@ namespace vkr {
 		f_ub.camera_pos = camera_pos;
 
 		f_ub.point_light_count = 0;
-		for (usize i = 0; i < lights.size(); i++) {
-			auto light = &lights[i];
+		for (ecs::View view = world->new_view<Transform, PointLight>(); view.valid(); view.next()) {
+			auto& trans = view.get<Transform>();
+			auto& light = view.get<PointLight>();
 
-			switch (light->type) {
-				case Light::Type::point: {
-					auto idx = f_ub.point_light_count++;
-					f_ub.point_lights[idx].intensity = light->intensity;
-					f_ub.point_lights[idx].diffuse   = light->diffuse;
-					f_ub.point_lights[idx].specular  = light->specular;
-					f_ub.point_lights[idx].position  = light->as.point.position;
-					f_ub.point_lights[idx].range     = light->as.point.range;
-				} break;
-				default: break;
+			auto idx = f_ub.point_light_count++;
+			f_ub.point_lights[idx].intensity = light.intensity;
+			f_ub.point_lights[idx].diffuse = light.diffuse;
+			f_ub.point_lights[idx].specular = light.specular;
+			f_ub.point_lights[idx].position = trans.m.get_translation();
+			f_ub.point_lights[idx].range = light.range;
+		}
+
+		f_ub.sun.direction = sun.direction;
+		f_ub.sun.intensity = sun.intensity;
+		f_ub.sun.diffuse = sun.diffuse;
+		f_ub.sun.specular = sun.specular;
+
+		scene_pip->begin();
+
+		for (auto view = world->new_view<Transform, Renderable3D>(); view.valid(); view.next()) {
+			auto& trans = view.get<Transform>();
+			auto& renderable = view.get<Renderable3D>();
+			
+			auto model = renderable.model;
+			auto material_id = renderable.material_id;
+
+			this->model = model;
+
+			scene_pip->bind_descriptor_set(0, 0);
+			scene_pip->bind_descriptor_set(1, 1 + material_id);
+
+			f_pc.use_diffuse_map = materials[material_id].diffuse == null ? 0.0f : 1.0f;
+			f_pc.use_normal_map = materials[material_id].normal == null ? 0.0f : 1.0f;
+
+			v_pc.transform = trans.m;
+			for (auto mesh : model->meshes) {
+				scene_pip->push_constant(Pipeline::Stage::vertex, v_pc);
+				scene_pip->push_constant(Pipeline::Stage::fragment, f_pc, sizeof(v_pc));
+				mesh->vb->bind();
+				mesh->ib->draw();
 			}
 		}
 
-		scene_pip->begin();
-	}
-
-	void Renderer3D::end() {
 		scene_pip->end();
 
 		tonemap->execute();
-	}
-
-	void Renderer3D::draw(Model3D* model, m4f transform, usize material_id) {
-		this->model = model;
-
-		scene_pip->bind_descriptor_set(0, 0);
-		scene_pip->bind_descriptor_set(1, 1 + material_id);
-
-		f_pc.use_diffuse_map = materials[material_id].diffuse == null ? 0.0f : 1.0f;
-		f_pc.use_normal_map  = materials[material_id].normal  == null ? 0.0f : 1.0f;
-
-		v_pc.transform = transform;
-		for (auto mesh : model->meshes) {
-			scene_pip->push_constant(Pipeline::Stage::vertex, v_pc);
-			scene_pip->push_constant(Pipeline::Stage::fragment, f_pc, sizeof(v_pc));
-			mesh->vb->bind();
-			mesh->ib->draw();
-		}
 	}
 
 	Mesh3D* Mesh3D::from_wavefront(VideoContext* video, WavefrontModel* wmodel, WavefrontModel::Mesh* wmesh) {

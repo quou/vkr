@@ -16,11 +16,13 @@ project "sbox"
 	}
 
 	includedirs {
-		"../vkr/include"
+		"../vkr/include",
+		"../vkr/ext/ecs/include"
 	}
 
 	links {
-		"vkr"
+		"vkr",
+		"ecs"
 	}
 
 	defines {

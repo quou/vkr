@@ -1,6 +1,7 @@
 include "ext/glfw"
 include "ext/stb"
 include "ext/vma"
+include "ext/ecs"
 
 project "vkr"
 	kind "SharedLib"
@@ -27,7 +28,8 @@ project "vkr"
 		"include/vkr",
 		"ext/glfw/include",
 		"ext/stb/include",
-		"ext/vma/include"
+		"ext/vma/include",
+		"ext/ecs/include"
 	}
 
 	defines {
@@ -38,7 +40,8 @@ project "vkr"
 	links {
 		"glfw",
 		"stb",
-		"vma"
+		"vma",
+		"ecs"
 	}
 
 	filter "system:linux"
@@ -53,7 +56,7 @@ project "vkr"
 	
 	filter "system:windows"
 		libdirs {
-			vk_lib_path	
+			vk_lib_path
 		}
 
 		includedirs {

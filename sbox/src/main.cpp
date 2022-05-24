@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include <vkr/vkr.hpp>
+#include <ecs/ecs.hpp>
 
 using namespace vkr;
 
@@ -11,12 +12,20 @@ private:
 	Model3D* cube;
 
 	f32 rot = 0.0f;
+	f64 time = 0.0f;
 
 	Renderer3D::ShaderConfig shaders;
 
 	Texture* wall_a;
 	Texture* wall_n;
 	Texture* wood_a;
+
+	ecs::World world;
+
+	ecs::Entity monkey1, monkey2, monkey3;
+	ecs::Entity ground;
+
+	ecs::Entity red_light, blue_light;
 public:
 	SandboxApp() : App("Sandbox", vkr::v2i(800, 600)) {}
 
@@ -51,53 +60,58 @@ public:
 		};
 
 		renderer = new Renderer3D(this, video, shaders, materials, 2);
-		renderer->lights.push_back(Renderer3D::Light {
-			.type = Renderer3D::Light::Type::point,
-			.intensity = 10.0f,
-			.specular = v3f(1.0f, 1.0f, 1.0f),
-			.diffuse = v3f(1.0f, 1.0f, 1.0f),
-			.as = {
-				.point = {
-					.position = v3f(0.0f, 1.0f, 1.0f),
-					.range = 2.0f
-				}
-			}
-		});
-		renderer->lights.push_back(Renderer3D::Light {
-			.type = Renderer3D::Light::Type::point,
+
+		red_light = world.new_entity();
+		red_light.add(Transform { m4f::translate(m4f::identity(), v3f(-2.0f, 1.0f, 1.0f)) });
+		red_light.add(PointLight {
 			.intensity = 10.0f,
 			.specular = v3f(1.0f, 0.0f, 0.0f),
 			.diffuse = v3f(1.0f, 0.0f, 0.0f),
-			.as = {
-				.point = {
-					.position = v3f(-2.0f, 1.0f, 1.0f),
-					.range = 2.0f
-				}
-			}
+			.range = 3.0f
 		});
-		renderer->lights.push_back(Renderer3D::Light {
-			.type = Renderer3D::Light::Type::point,
+
+		blue_light = world.new_entity();
+		blue_light.add(Transform{ m4f::translate(m4f::identity(), v3f(2.0f, -1.0f, 1.0f)) });
+		blue_light.add(PointLight{
 			.intensity = 10.0f,
 			.specular = v3f(0.0f, 0.0f, 1.0f),
 			.diffuse = v3f(0.0f, 0.0f, 1.0f),
-			.as = {
-				.point = {
-					.position = v3f(2.0f, -1.0f, 1.0f),
-					.range = 2.0f
-				}
-			}
-		});
+			.range = 2.0f
+			});
+		
+		renderer->sun.direction = v3f(0.0f, 1.0f, 0.0f);
+		renderer->sun.intensity = 1.0f;
+		renderer->sun.specular = v3f(1.0f, 1.0f, 1.0f);
+		renderer->sun.diffuse = v3f(1.0f, 1.0f, 1.0f);
+
+		monkey1 = world.new_entity();
+		monkey1.add(Transform { m4f::translate(m4f::identity(), v3f(-2.5f, 0.0f, 0.0f)) });
+		monkey1.add(Renderable3D { monkey, 0 });
+
+		monkey2 = world.new_entity();
+		monkey2.add(Transform { m4f::identity() });
+		monkey2.add(Renderable3D { monkey, 1 });
+
+		monkey3 = world.new_entity();
+		monkey3.add(Transform { m4f::translate(m4f::identity(), v3f(2.5f, 0.0f, 0.0f)) });
+		monkey3.add(Renderable3D { monkey, 1 });
+
+		ground = world.new_entity();
+		ground.add(Transform { m4f::translate(m4f::identity(), v3f(0.0f, -2.0f, 0.0f)) });
+		ground.add(Renderable3D { cube, 0 });
 	}
 
 	void on_update(f64 ts) override {
-		renderer->begin();
-			renderer->draw(monkey, m4f::translate(m4f::identity(), v3f(-2.5f, 0.0f, 0.0f)), 0);
-			renderer->draw(monkey, m4f::rotate(m4f::identity(), rot, v3f(0.0f, 1.0f, 0.0f)), 1);
-			renderer->draw(monkey, m4f::translate(m4f::identity(), v3f(2.5f, 0.0f, 0.0f)), 1);
-			renderer->draw(cube, m4f::translate(m4f::identity(), v3f(0.0f, -2.0f, 0.0f)), 0);
-		renderer->end();
+		auto& t = monkey2.get<Transform>();
+		t.m = m4f::rotate(m4f::identity(), rot, v3f(0.0f, 1.0f, 0.0f));
+
+		auto& lt = blue_light.get<Transform>();
+		lt.m = m4f::translate(m4f::identity(), v3f((f32)cos(time * 2.0f), -1.0f, (f32)sin(time * 2.0f)));
+
+		renderer->draw(&world);
 
 		rot += 1.0f * (f32)ts;
+		time += ts;
 	}
 
 	void on_deinit() override {

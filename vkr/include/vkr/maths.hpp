@@ -453,6 +453,8 @@ namespace vkr {
 		static m4f rotate(m4f m, f32 a, v3f v);
 		static m4f scale(m4f m, v3f v);
 
+		v3f get_translation();
+
 		static m4f lookat(v3f c, v3f o, v3f u);
 		static m4f pers(f32 fov, f32 asp, f32 n, f32 f);
 		static m4f orth(f32 l, f32 r, f32 b, f32 t, f32 n, f32 f);

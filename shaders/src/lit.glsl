@@ -48,10 +48,20 @@ struct PointLight {
 	vec3 position;
 };
 
+struct DirectionalLight {
+	float intensity;
+	vec3 diffuse;
+	vec3 specular;
+	vec3 direction;
+};
+
 layout (location = 0) out vec4 color;
 
 layout (binding = 1) uniform FragmentData {
 	vec3 camera_pos;
+
+	DirectionalLight sun;
+
 	int point_light_count;
 	PointLight point_lights[max_point_lights];
 } data;
@@ -94,6 +104,23 @@ vec3 compute_point_light(vec3 normal, vec3 view_dir, PointLight light) {
 	return diffuse + specular;
 }
 
+vec3 compute_directional_light(vec3 normal, vec3 view_dir, DirectionalLight light) {
+	vec3 light_dir = normalize(light.direction);
+	vec3 reflect_dir = reflect(light_dir, normal);
+
+	vec3 diffuse =
+		light.diffuse *
+		light.intensity *
+		max(dot(light_dir, normal), 0.0);
+
+	vec3 specular =
+		light.specular *
+		light.intensity *
+		pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
+
+	return diffuse + specular;
+}
+
 void main() {
 	vec3 normal;
 
@@ -111,6 +138,8 @@ void main() {
 	for (int i = 0; i < data.point_light_count; i++) {
 		lighting_result += compute_point_light(normal, view_dir, data.point_lights[i]);
 	}
+
+	lighting_result += compute_directional_light(normal, view_dir, data.sun);
 
 	vec4 texture_color = vec4(1.0);
 	if (push_data.use_diffuse_map > 0.0) {

@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include <ecs/ecs.hpp>
+
 #include "common.hpp"
 #include "maths.hpp"
 #include "wavefront.hpp"
@@ -46,34 +48,24 @@ namespace vkr {
 			static constexpr usize get_texture_count() { return 2; }
 		};
 
-		struct Light {
-			enum class Type {
-				point
-			} type;
-
-			f32 intensity;
-			v3f specular;
-			v3f diffuse;
-
-			union {
-				struct {
-					v3f position;
-					f32 range;
-				} point;
-			} as;
-		};
-
 		struct ShaderConfig {
 			Shader* lit;
 			Shader* tonemap;
 		};
 	private:
 		struct impl_PointLight {
-			alignas(4)  float intensity;
-			alignas(4)  float range;
+			alignas(4)  f32 intensity;
+			alignas(4)  f32 range;
 			alignas(16) v3f diffuse;
 			alignas(16) v3f specular;
 			alignas(16) v3f position;
+		};
+
+		struct impl_DirectionalLight {
+			alignas(4)  f32 intensity;
+			alignas(16) v3f diffuse;
+			alignas(16) v3f specular;
+			alignas(16) v3f direction;
 		};
 
 		struct {
@@ -83,7 +75,9 @@ namespace vkr {
 		struct {
 			alignas(16) v3f camera_pos;
 
-			i32 point_light_count;
+			impl_DirectionalLight sun;
+
+			alignas(4) i32 point_light_count;
 			impl_PointLight point_lights[max_point_lights];
 		} f_ub;
 
@@ -103,6 +97,7 @@ namespace vkr {
 		VertexBuffer* fullscreen_tri;
 
 		Pipeline* scene_pip;
+		Pipeline* shadow_pip;
 		App* app;
 
 		PostProcessStep* tonemap;
@@ -117,14 +112,17 @@ namespace vkr {
 
 		friend class PostProcessStep;
 	public:
-		std::vector<Light> lights;
+		struct {
+			v3f direction;
+			f32 intensity;
+			v3f specular;
+			v3f diffuse;
+		} sun;
 
 		Renderer3D(App* app, VideoContext* video, const ShaderConfig& shaders, Material* materials, usize material_count);
 		~Renderer3D();
 
-		void begin();
-		void end();
-		void draw(Model3D* model, m4f transform, usize material_id);
+		void draw(ecs::World* world);
 
 		struct Vertex {
 			v3f position;
@@ -154,5 +152,21 @@ namespace vkr {
 	public:
 		static Model3D* from_wavefront(VideoContext* video, WavefrontModel* wmodel);
 		~Model3D();
+	};
+
+	struct Transform {
+		m4f m;
+	};
+
+	struct Renderable3D {
+		Model3D* model;
+		usize material_id;
+	};
+
+	struct PointLight {
+		f32 intensity;
+		v3f specular;
+		v3f diffuse;
+		f32 range;
 	};
 }

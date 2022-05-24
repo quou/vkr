@@ -107,6 +107,11 @@ namespace vkr {
 		return m * r;
 	}
 
+
+	v3f m4f::get_translation() {
+		return v3f(m[3][0], m[3][1], m[3][2]);
+	}
+
 	m4f m4f::lookat(v3f c, v3f o, v3f u) {
 		m4f r(1.0f);
 
