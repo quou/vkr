@@ -51,6 +51,7 @@ namespace vkr {
 		struct ShaderConfig {
 			Shader* lit;
 			Shader* tonemap;
+			Shader* shadowmap;
 		};
 	private:
 		struct impl_PointLight {
@@ -105,6 +106,7 @@ namespace vkr {
 		Texture* default_texture;
 
 		Framebuffer* scene_fb;
+		Framebuffer* shadow_fb;
 
 		Model3D* model;
 
@@ -140,7 +142,7 @@ namespace vkr {
 
 		friend class Renderer3D;
 	public:
-		static Mesh3D* from_wavefront(VideoContext* video, WavefrontModel* wmodel, WavefrontModel::Mesh* wmesh);
+		static Mesh3D* from_wavefront(Model3D* model, VideoContext* video, WavefrontModel* wmodel, WavefrontModel::Mesh* wmesh);
 		~Mesh3D();
 	};
 
@@ -148,10 +150,15 @@ namespace vkr {
 	private:
 		std::vector<Mesh3D*> meshes;
 
+		AABB aabb;
+
 		friend class Renderer3D;
+		friend class Mesh3D;
 	public:
 		static Model3D* from_wavefront(VideoContext* video, WavefrontModel* wmodel);
 		~Model3D();
+
+		inline const AABB& get_aabb() const { return aabb; }
 	};
 
 	struct Transform {

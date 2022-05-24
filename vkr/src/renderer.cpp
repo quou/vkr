@@ -3,6 +3,7 @@
 #include "renderer.hpp"
 #include "vkr.hpp"
 
+
 static const vkr::u32 default_texture_data[2][2] = {
 	0xff00ffff, 0x000000ff,
 	0x000000ff, 0xff00ffff
@@ -120,9 +121,18 @@ namespace vkr {
 			},
 		};
 
+		Framebuffer::Attachment shadow_attachment = {
+			.type = Framebuffer::Attachment::Type::depth,
+			.format = Framebuffer::Attachment::Format::depth
+		};
+
 		scene_fb = new Framebuffer(video,
 			Framebuffer::Flags::headless | Framebuffer::Flags::fit,
 			app->get_size(), attachments, 2);
+
+		shadow_fb = new Framebuffer(video,
+			Framebuffer::Flags::headless,
+			v2i(1024, 1024), &shadow_attachment, 1);
 
 		Pipeline::Attribute attribs[] = {
 			{
@@ -175,7 +185,7 @@ namespace vkr {
 		this->materials = new Material[material_count]();
 		memcpy(this->materials, materials, material_count * sizeof(Material));
 
-		Pipeline::Descriptor uniform_descs[2];
+		Pipeline::Descriptor uniform_descs[3];
 		uniform_descs[0].name = "vertex_uniform_buffer";
 		uniform_descs[0].binding = 0;
 		uniform_descs[0].stage = Pipeline::Stage::vertex;
@@ -183,17 +193,30 @@ namespace vkr {
 		uniform_descs[0].resource.uniform.ptr  = &v_ub;
 		uniform_descs[0].resource.uniform.size = sizeof(v_ub);
 
-		uniform_descs[1].name = "vertex_uniform_buffer";
+		uniform_descs[1].name = "fragment_uniform_buffer";
 		uniform_descs[1].binding = 1;
 		uniform_descs[1].stage = Pipeline::Stage::fragment;
 		uniform_descs[1].resource.type = Pipeline::ResourcePointer::Type::uniform_buffer;
 		uniform_descs[1].resource.uniform.ptr  = &f_ub;
 		uniform_descs[1].resource.uniform.size = sizeof(f_ub);
 
+		uniform_descs[2].name = "shadowmap";
+		uniform_descs[2].binding = 2;
+		uniform_descs[2].stage = Pipeline::Stage::fragment;
+		uniform_descs[2].resource.type = Pipeline::ResourcePointer::Type::framebuffer_output;
+		uniform_descs[2].resource.framebuffer.ptr = shadow_fb;
+		uniform_descs[2].resource.framebuffer.attachment = 0;
+
+		Pipeline::DescriptorSet shadow_desc_set = {
+			.name = "uniforms",
+			.descriptors = uniform_descs,
+			.count = 1
+		};
+
 		auto desc_sets = new Pipeline::DescriptorSet[1 + material_count]();
 		desc_sets[0].name = "uniforms";
 		desc_sets[0].descriptors = uniform_descs;
-		desc_sets[0].count = 2;
+		desc_sets[0].count = 3;
 
 		for (usize i = 0; i < material_count; i++) {
 			auto set = desc_sets + i + 1;
@@ -225,6 +248,16 @@ namespace vkr {
 			scene_fb,
 			desc_sets, material_count + 1,
 			pc, 2);
+
+		shadow_pip = new Pipeline(video,
+			Pipeline::Flags::depth_test |
+			Pipeline::Flags::cull_back_face,
+			shaders.shadowmap,
+			sizeof(Vertex),
+			attribs, 1,
+			shadow_fb,
+			desc_sets, 1,
+			pc, 1);
 
 		v2f tri_verts[] = {
 			/* Position          UV */
@@ -267,6 +300,70 @@ namespace vkr {
 		auto size = app->get_size();
 
 		v3f camera_pos(0.0f, 0.0f, -5.0f);
+
+		AABB scene_aabb = {
+			.min = { INFINITY, INFINITY, INFINITY },
+			.max = { -INFINITY, -INFINITY, -INFINITY }
+		};
+
+		for (auto view = world->new_view<Transform, Renderable3D>(); view.valid(); view.next()) {
+			auto& trans = view.get<Transform>();
+			auto& renderable = view.get<Renderable3D>();
+
+			const auto& model_aabb = m4f::transform(trans.m, renderable.model->get_aabb());
+
+			scene_aabb.min.x = std::min(scene_aabb.min.x, model_aabb.min.x);
+			scene_aabb.min.y = std::min(scene_aabb.min.y, model_aabb.min.y);
+			scene_aabb.min.z = std::min(scene_aabb.min.z, model_aabb.min.z);
+			scene_aabb.max.x = std::max(scene_aabb.max.x, model_aabb.max.x);
+			scene_aabb.max.y = std::max(scene_aabb.max.y, model_aabb.max.y);
+			scene_aabb.max.z = std::max(scene_aabb.max.z, model_aabb.max.z);
+		}
+
+		v_ub.view = m4f::lookat(
+			sun.direction,
+			v3f(0.0f, 0.0f, 0.0f),
+			v3f(0.0f, 1.0f, 0.0f));
+
+		scene_aabb = m4f::transform(v_ub.view, scene_aabb);
+
+		float z_mul = 3.0f;
+		if (scene_aabb.min.z < 0.0f) {
+			scene_aabb.min.z *= z_mul;
+		} else {
+			scene_aabb.min.z /= z_mul;
+		}
+
+		if (scene_aabb.max.z < 0.0f) {
+			scene_aabb.max.z /= z_mul;
+		} else {
+			scene_aabb.max.z *= z_mul;
+		}
+
+		v_ub.projection = m4f::orth(
+			scene_aabb.min.x, scene_aabb.max.x,
+			scene_aabb.min.y, scene_aabb.max.y,
+			scene_aabb.min.z, scene_aabb.max.z);
+
+		shadow_pip->begin();
+
+		for (auto view = world->new_view<Transform, Renderable3D>(); view.valid(); view.next()) {
+			auto& trans = view.get<Transform>();
+			auto& renderable = view.get<Renderable3D>();
+
+			shadow_pip->bind_descriptor_set(0, 0);
+
+			v_pc.transform = trans.m;
+
+			v_pc.transform = trans.m;
+			for (auto mesh : renderable.model->meshes) {
+				scene_pip->push_constant(Pipeline::Stage::vertex, v_pc);
+				mesh->vb->bind();
+				mesh->ib->draw();
+			}
+		}
+
+		shadow_pip->end();
 
 		v_ub.projection = m4f::pers(70.0f, (f32)size.x / (f32)size.y, 0.1f, 100.0f);
 		v_ub.view = m4f::translate(m4f::identity(), camera_pos);
@@ -322,7 +419,7 @@ namespace vkr {
 		tonemap->execute();
 	}
 
-	Mesh3D* Mesh3D::from_wavefront(VideoContext* video, WavefrontModel* wmodel, WavefrontModel::Mesh* wmesh) {
+	Mesh3D* Mesh3D::from_wavefront(Model3D* model, VideoContext* video, WavefrontModel* wmodel, WavefrontModel::Mesh* wmesh) {
 		auto verts = new Renderer3D::Vertex[wmesh->vertices.size()];
 		auto indices = new u16[wmesh->vertices.size()];
 
@@ -333,6 +430,13 @@ namespace vkr {
 			auto pos = wmodel->positions[vertex.position];
 			auto normal = wmodel->normals[vertex.normal];
 			auto uv = wmodel->uvs[vertex.uv];
+
+			model->aabb.min.x = std::min(pos.x, model->aabb.min.x);
+			model->aabb.min.y = std::min(pos.y, model->aabb.min.y);
+			model->aabb.min.z = std::min(pos.z, model->aabb.min.z);
+			model->aabb.max.x = std::max(pos.x, model->aabb.max.x);
+			model->aabb.max.y = std::max(pos.y, model->aabb.max.y);
+			model->aabb.max.z = std::max(pos.z, model->aabb.max.z);
 
 			bool is_new = true;
 
@@ -412,12 +516,17 @@ namespace vkr {
 	Model3D* Model3D::from_wavefront(VideoContext* video, WavefrontModel* wmodel) {
 		Model3D* model = new Model3D;
 
+		model->aabb = AABB {
+			.min = { INFINITY, INFINITY, INFINITY },
+			.max = { -INFINITY, -INFINITY, -INFINITY }
+		};
+
 		if (wmodel->has_root_mesh) {
-			model->meshes.push_back(Mesh3D::from_wavefront(video, wmodel, &wmodel->root_mesh));
+			model->meshes.push_back(Mesh3D::from_wavefront(model, video, wmodel, &wmodel->root_mesh));
 		}
 
 		for (auto& mesh : wmodel->meshes) {
-			model->meshes.push_back(Mesh3D::from_wavefront(video, wmodel, &mesh));
+			model->meshes.push_back(Mesh3D::from_wavefront(model, video, wmodel, &mesh));
 		}
 
 		return model;

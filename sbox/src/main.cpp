@@ -36,6 +36,9 @@ public:
 		shaders.tonemap = Shader::from_file(video,
 			"res/shaders/tonemap.vert.spv",
 			"res/shaders/tonemap.frag.spv");
+		shaders.shadowmap = Shader::from_file(video,
+			"res/shaders/shadowmap.vert.spv",
+			"res/shaders/shadowmap.frag.spv");
 
 		auto monkey_obj = WavefrontModel::from_file("res/models/monkey.obj");
 		monkey = Model3D::from_wavefront(video, monkey_obj);
@@ -79,7 +82,7 @@ public:
 			.range = 2.0f
 			});
 		
-		renderer->sun.direction = v3f(0.0f, 1.0f, 0.0f);
+		renderer->sun.direction = v3f(0.3f, 1.0f, 0.3f);
 		renderer->sun.intensity = 1.0f;
 		renderer->sun.specular = v3f(1.0f, 1.0f, 1.0f);
 		renderer->sun.diffuse = v3f(1.0f, 1.0f, 1.0f);
@@ -123,6 +126,7 @@ public:
 		delete wood_a;
 		delete shaders.lit;
 		delete shaders.tonemap;
+		delete shaders.shadowmap;
 	}
 };
 

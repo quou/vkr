@@ -81,6 +81,8 @@ layout (push_constant) uniform PushData {
 layout (set = 1, binding = 0) uniform sampler2D diffuse_map;
 layout (set = 1, binding = 1) uniform sampler2D normal_map;
 
+layout (set = 0, binding = 2) uniform sampler2D shadowmap;
+
 vec3 compute_point_light(vec3 normal, vec3 view_dir, PointLight light) {
 	vec3 light_dir = normalize(light.position - fs_in.world_pos);
 	vec3 reflect_dir = reflect(light_dir, normal);

@@ -437,6 +437,10 @@ namespace vkr {
 	template struct VKR_API v4<f32>;
 	template struct VKR_API v4<f64>;
 
+	struct AABB {
+		v3f min, max;
+	};
+
 	struct VKR_API m4f {
 		f32 m[4][4];
 
@@ -458,6 +462,9 @@ namespace vkr {
 		static m4f lookat(v3f c, v3f o, v3f u);
 		static m4f pers(f32 fov, f32 asp, f32 n, f32 f);
 		static m4f orth(f32 l, f32 r, f32 b, f32 t, f32 n, f32 f);
+
+		static v4f transform(m4f m, v4f v);
+		static AABB transform(m4f m, AABB aabb);
 
 		m4f inverse();
 		m4f transposed();

@@ -156,16 +156,22 @@ namespace vkr {
 		return r;
 	}
 
-	static m4f orth(f32 l, f32 r, f32 b, f32 t, f32 n, f32 f) {
+	m4f m4f::orth(f32 l, f32 r, f32 b, f32 t, f32 n, f32 f) {
 		m4f res(1.0f);
 
-		res.m[0][0] = 2.0f / (r - l);
-		res.m[1][1] = 2.0f / (t - b);
-		res.m[2][2] = 2.0f / (n - f);
+		f32* data = (f32*)res.m;
 
-		res.m[3][0] = (l + r) / (l - r);
-		res.m[3][1] = (b + t) / (b - t);
-		res.m[3][2] = (f + n) / (f - n);
+		f32 lr = 1.0f / (l - r);
+		f32 bt = 1.0f / (b - t);
+		f32 nf = 1.0f / (n - f);
+
+		data[0] = -2.0f * lr;
+		data[5] = -2.0f * bt;
+		data[10] = 2.0f * nf;
+		
+		data[12] = (l + r) * lr;
+		data[13] = (t + b) * bt;
+		data[14] = (f + n) * nf;
 
 		return res;
 	}
@@ -249,5 +255,44 @@ namespace vkr {
 		r.m[3][3] = m[3][3];
 
 		return r;
+	}
+
+	v4f m4f::transform(m4f m, v4f v) {
+		return v4f(
+			m.m[0][0] * v.x + m.m[1][0] * v.y + m.m[2][0] * v.z + m.m[3][0] + v.w,
+			m.m[0][1] * v.x + m.m[1][1] * v.y + m.m[2][1] * v.z + m.m[3][1] + v.w,
+			m.m[0][2] * v.x + m.m[1][2] * v.y + m.m[2][2] * v.z + m.m[3][2] + v.w,
+			m.m[0][3] * v.x + m.m[1][3] * v.y + m.m[2][3] * v.z + m.m[3][3] + v.w);
+	}
+
+	AABB m4f::transform(m4f m, AABB aabb) {
+		v3f corners[] = {
+			aabb.min,
+			v3f(aabb.min.x, aabb.max.y, aabb.min.z),
+			v3f(aabb.min.x, aabb.max.y, aabb.max.z),
+			v3f(aabb.min.x, aabb.min.y, aabb.max.z),
+			v3f(aabb.max.x, aabb.min.y, aabb.min.z),
+			v3f(aabb.max.x, aabb.max.y, aabb.min.z),
+			aabb.max,
+			v3f(aabb.max.x, aabb.min.y, aabb.max.z)
+		};
+
+		AABB result = {
+			.min = { INFINITY, INFINITY, INFINITY },
+			.max = { -INFINITY, -INFINITY, -INFINITY }
+		};
+
+		for (u32 i = 0; i < 8; i++) {
+			v4f point = m4f::transform(m, v4f(corners[i].x, corners[i].y, corners[i].z, 0.0f));
+
+			result.min.x = std::min(result.min.x, point.x);
+			result.min.y = std::min(result.min.y, point.y);
+			result.min.z = std::min(result.min.z, point.z);
+			result.max.x = std::max(result.max.x, point.x);
+			result.max.y = std::max(result.max.y, point.y);
+			result.max.z = std::max(result.max.z, point.z);
+		}
+
+		return result;
 	}
 }
