@@ -9,8 +9,33 @@
 namespace vkr {
 	class Mesh3D;
 	class Model3D;
+	class Renderer3D;
 
 	static usize constexpr max_point_lights = 32;
+
+	class VKR_API PostProcessStep {
+	private:
+		Pipeline* pipeline;
+		Framebuffer* framebuffer;
+
+		Renderer3D* renderer;
+
+		bool use_default_fb;
+		usize dependency_count;
+	public:
+		struct Dependency {
+			const char* name;
+			Framebuffer* framebuffer;
+			u32 attachment;
+		};
+
+		PostProcessStep(Renderer3D* renderer, Shader* shader, Dependency* dependencies, usize dependency_count, bool use_default_fb = false);
+		~PostProcessStep();
+
+		void execute();
+
+		inline Framebuffer* get_framebuffer() { return framebuffer; }
+	};
 
 	class VKR_API Renderer3D {
 	public:
@@ -64,7 +89,7 @@ namespace vkr {
 
 		struct {
 			v2f screen_size;
-		} f_tonemap_ub;
+		} f_post_ub;
 
 		struct {
 			m4f transform;
@@ -78,8 +103,9 @@ namespace vkr {
 		VertexBuffer* fullscreen_tri;
 
 		Pipeline* scene_pip;
-		Pipeline* tonemap_pip;
 		App* app;
+
+		PostProcessStep* tonemap;
 
 		Texture* default_texture;
 
@@ -88,6 +114,8 @@ namespace vkr {
 		Model3D* model;
 
 		Material* materials;
+
+		friend class PostProcessStep;
 	public:
 		std::vector<Light> lights;
 

@@ -9,6 +9,101 @@ static const vkr::u32 default_texture_data[2][2] = {
 };
 
 namespace vkr {
+	PostProcessStep::PostProcessStep(
+			Renderer3D* renderer, Shader* shader,
+			Dependency* dependencies, usize dependency_count,
+			bool use_default_fb) : framebuffer(null), use_default_fb(use_default_fb),
+			dependency_count(dependency_count), renderer(renderer) {
+
+		if (!use_default_fb) {
+			Framebuffer::Attachment attachments[] = {
+				{
+					.type = Framebuffer::Attachment::Type::color,
+					.format = Framebuffer::Attachment::Format::rgbaf16,
+				}
+			};
+
+			framebuffer = new Framebuffer(renderer->app->video,
+				Framebuffer::Flags::headless | Framebuffer::Flags::fit,
+				renderer->app->get_size(), attachments, 1);
+		} else {
+			framebuffer = renderer->app->get_default_framebuffer();
+		}
+
+
+		Pipeline::Attribute post_attribs[] = {
+			{
+				.name = "position",
+				.location = 0,
+				.offset = 0,
+				.type = Pipeline::Attribute::Type::float2
+			},
+			{
+				.name = "uv",
+				.location = 1,
+				.offset = sizeof(v2f),
+				.type = Pipeline::Attribute::Type::float2
+			},
+		};
+
+
+		Pipeline::Descriptor uniform_desc{};
+		uniform_desc.name = "fragment_uniform_buffer";
+		uniform_desc.binding = 0;
+		uniform_desc.stage = Pipeline::Stage::fragment;
+		uniform_desc.resource.type = Pipeline::ResourcePointer::Type::uniform_buffer;
+		uniform_desc.resource.uniform.ptr = &renderer->f_post_ub;
+		uniform_desc.resource.uniform.size = sizeof(renderer->f_post_ub);
+
+		auto sampler_descs = new Pipeline::Descriptor[dependency_count]();
+		for (usize i = 0; i < dependency_count; i++) {
+			sampler_descs[i].name = "input";
+			sampler_descs[i].binding = i;
+			sampler_descs[i].stage = Pipeline::Stage::fragment;
+			sampler_descs[i].resource.type = Pipeline::ResourcePointer::Type::framebuffer_output;
+			sampler_descs[i].resource.framebuffer.ptr = dependencies[i].framebuffer;
+			sampler_descs[i].resource.framebuffer.attachment = dependencies[i].attachment;
+		}
+
+		Pipeline::DescriptorSet desc_sets[] = {
+			{
+				.name = "uniforms",
+				.descriptors = &uniform_desc,
+				.count = 1,
+			},
+			{
+				.name = "samplers",
+				.descriptors = sampler_descs,
+				.count = dependency_count
+			}
+		};
+
+		pipeline = new Pipeline(renderer->app->video,
+			Pipeline::Flags::cull_back_face,
+			shader,
+			sizeof(v2f) * 2,
+			post_attribs, 2,
+			framebuffer,
+			desc_sets, 2);
+	}
+
+	PostProcessStep::~PostProcessStep() {
+		delete pipeline;
+		if (use_default_fb) {
+			delete framebuffer;
+		}
+	}
+
+	void PostProcessStep::execute() {
+		pipeline->begin();
+		pipeline->bind_descriptor_set(0, 0);
+		pipeline->bind_descriptor_set(1, 1);
+
+		renderer->fullscreen_tri->bind();
+		renderer->fullscreen_tri->draw(3);
+		pipeline->end();
+	}
+
 	Renderer3D::Renderer3D(App* app, VideoContext* video, const ShaderConfig& shaders, Material* materials, usize material_count) :
 		app(app), model(null) {
 
@@ -131,68 +226,24 @@ namespace vkr {
 			desc_sets, material_count + 1,
 			pc, 2);
 
-		Pipeline::Attribute post_attribs[] = {
-			{
-				.name     = "position",
-				.location = 0,
-				.offset   = 0,
-				.type     = Pipeline::Attribute::Type::float2
-			},
-			{
-				.name     = "uv",
-				.location = 1,
-				.offset   = sizeof(v2f),
-				.type     = Pipeline::Attribute::Type::float2
-			},
-		};
-
 		v2f tri_verts[] = {
 			/* Position          UV */
 			{ -1.0, -1.0 },      { 0.0f, 0.0f },
 			{ -1.0,  3.0 },      { 0.0f, 2.0f },
 			{  3.0, -1.0 },      { 2.0f, 0.0f }
-
 		};
 
 		fullscreen_tri = new VertexBuffer(video, tri_verts, sizeof(tri_verts));
 
-		Pipeline::Descriptor tonemap_uniform_desc{};
-		tonemap_uniform_desc.name = "fragment_uniform_buffer";
-		tonemap_uniform_desc.binding = 0;
-		tonemap_uniform_desc.stage = Pipeline::Stage::fragment;
-		tonemap_uniform_desc.resource.type = Pipeline::ResourcePointer::Type::uniform_buffer;
-		tonemap_uniform_desc.resource.uniform.ptr  = &f_tonemap_ub;
-		tonemap_uniform_desc.resource.uniform.size = sizeof(f_tonemap_ub);
-
-		Pipeline::Descriptor tonemap_sampler_desc{};
-		tonemap_sampler_desc.name = "input";
-		tonemap_sampler_desc.binding = 0;
-		tonemap_sampler_desc.stage = Pipeline::Stage::fragment;
-		tonemap_sampler_desc.resource.type = Pipeline::ResourcePointer::Type::framebuffer_output;
-		tonemap_sampler_desc.resource.framebuffer.ptr = scene_fb;
-		tonemap_sampler_desc.resource.framebuffer.attachment = 0;
-
-		Pipeline::DescriptorSet tonemap_desc_sets[] = {
+		PostProcessStep::Dependency tonemap_deps[] = {
 			{
-				.name = "uniforms",
-				.descriptors = &tonemap_uniform_desc,
-				.count = 1,
-			},
-			{
-				.name = "samplers",
-				.descriptors = &tonemap_sampler_desc,
-				.count = 1
+				.name = "color",
+				.framebuffer = scene_fb,
+				.attachment = 0
 			}
 		};
 
-		tonemap_pip = new Pipeline(video,
-			Pipeline::Flags::depth_test |
-			Pipeline::Flags::cull_back_face,
-			shaders.tonemap,
-			sizeof(v2f) * 2,
-			post_attribs, 2,
-			app->get_default_framebuffer(),
-			tonemap_desc_sets, 2);
+		tonemap = new PostProcessStep(this, shaders.tonemap, tonemap_deps, 1, true);
 
 		for (usize i = 0; i < material_count; i++) {
 			delete[] desc_sets[i + 1].descriptors;
@@ -204,7 +255,7 @@ namespace vkr {
 	Renderer3D::~Renderer3D() {
 		delete fullscreen_tri;
 		delete scene_fb;
-		delete tonemap_pip;
+		delete tonemap;
 		delete scene_pip;
 
 		delete[] materials;
@@ -245,15 +296,7 @@ namespace vkr {
 	void Renderer3D::end() {
 		scene_pip->end();
 
-		tonemap_pip->begin();
-
-		tonemap_pip->bind_descriptor_set(0, 0);
-		tonemap_pip->bind_descriptor_set(1, 1);
-
-		fullscreen_tri->bind();
-		fullscreen_tri->draw(3);
-
-		tonemap_pip->end();
+		tonemap->execute();
 	}
 
 	void Renderer3D::draw(Model3D* model, m4f transform, usize material_id) {
