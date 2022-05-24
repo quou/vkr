@@ -10,6 +10,10 @@ project "vma"
 	targetdir "../bin"
 	objdir "obj"
 
+	includedirs {
+		vk_include_path
+	}
+
 	files {
 		"include/vk_mem_alloc.h",
 		"src/vma.cpp"

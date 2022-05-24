@@ -325,15 +325,15 @@ namespace vkr {
 			f32 f = 1.0f / (delta_uv_1.x * delta_uv_2.y - delta_uv_2.x * delta_uv_1.y);
 
 			v3f tangent = {
-				.x = f * (delta_uv_2.y * edge_1.x - delta_uv_1.y * edge_2.x),
-				.y = f * (delta_uv_2.y * edge_1.y - delta_uv_1.y * edge_2.y),
-				.z = f * (delta_uv_2.y * edge_1.z - delta_uv_1.y * edge_2.z)
+				f * (delta_uv_2.y * edge_1.x - delta_uv_1.y * edge_2.x),
+				f * (delta_uv_2.y * edge_1.y - delta_uv_1.y * edge_2.y),
+				f * (delta_uv_2.y * edge_1.z - delta_uv_1.y * edge_2.z)
 			};
 
 			v3f bitangent = {
-				.x = f * (-delta_uv_2.x * edge_1.x + delta_uv_1.x * edge_2.x),
-				.y = f * (-delta_uv_2.x * edge_1.y + delta_uv_1.x * edge_2.y),
-				.z = f * (-delta_uv_2.x * edge_1.z + delta_uv_1.x * edge_2.z)
+				f * (-delta_uv_2.x * edge_1.x + delta_uv_1.x * edge_2.x),
+				f * (-delta_uv_2.x * edge_1.y + delta_uv_1.x * edge_2.y),
+				f * (-delta_uv_2.x * edge_1.z + delta_uv_1.x * edge_2.z)
 			};
 
 			verts[indices[i + 0]].tangent = tangent;

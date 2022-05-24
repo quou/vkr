@@ -4,18 +4,6 @@
 
 using namespace vkr;
 
-struct MatrixBuffer {
-	m4f transform;
-};
-
-struct ColorBuffer {
-	v3f color;
-};
-
-struct Vertex {
-	v2f position;
-};
-
 class SandboxApp : public vkr::App {
 private:
 	Renderer3D* renderer;

@@ -76,7 +76,7 @@ namespace vkr {
 
 		usize i = 0;
 
-		while ((token = strtok_r(save, "/", &save)) && i < 3) {
+		while ((token = strtok_s(save, "/", &save)) && i < 3) {
 			usize* v = null;
 
 			switch (i) {
@@ -112,7 +112,7 @@ namespace vkr {
 		std::vector<char*> tokens;
 		
 		/* Split by space. */
-		while ((token = strtok_r(save, " ", &save))) {
+		while ((token = strtok_s(save, " ", &save))) {
 			tokens.push_back(copy_string(token));
 		}
 

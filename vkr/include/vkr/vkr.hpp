@@ -333,6 +333,8 @@ namespace vkr {
 		 * window is resized. */
 		std::vector<Framebuffer*> framebuffers;
 		std::vector<Pipeline*> pipelines;
+
+		bool validation_layers_enabled;
 	public:
 		impl_VideoContext* handle;
 		bool want_recreate;
@@ -347,6 +349,8 @@ namespace vkr {
 		void end();
 
 		void resize(v2i new_size);
+
+		inline bool are_validation_layers_enabled() const { return validation_layers_enabled; }
 	};
 
 	class VKR_API Shader {

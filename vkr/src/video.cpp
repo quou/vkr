@@ -208,7 +208,7 @@ namespace vkr {
 
 		for (u32 i = 0; i < sizeof(validation_layers) / sizeof(*validation_layers); i++) {
 			bool found = false;
-
+			
 			const char* layer = validation_layers[i];
 
 			for (u32 ii = 0; ii < avail_count; ii++) {
@@ -570,7 +570,50 @@ namespace vkr {
 		}
 	}
 
-	VideoContext::VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions) : current_frame(0), app(app), want_recreate(false) {
+	static VKAPI_ATTR VkBool32 debug_callback(
+		VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+		VkDebugUtilsMessageTypeFlagsEXT type,
+		const VkDebugUtilsMessengerCallbackDataEXT* cdata,
+		void* udata) {
+
+		if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+			switch (severity) {
+				case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+					warning("%s", cdata->pMessage);
+					break;
+				default:
+					error("%s", cdata->pMessage);
+					break;
+			}
+		}
+
+		return VK_FALSE;
+	}
+
+	VkResult create_debug_utils_messenger_ext(
+		VkInstance instance,
+		const VkDebugUtilsMessengerCreateInfoEXT* info,
+		const VkAllocationCallbacks* allocator,
+		VkDebugUtilsMessengerEXT* messenger) {
+
+		auto f = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+
+		return f != null ? f(instance, info, allocator, messenger) : VK_ERROR_EXTENSION_NOT_PRESENT;
+	}
+
+	void destroy_debug_utils_messenger_ext(
+		VkInstance instance,
+		VkDebugUtilsMessengerEXT messenger,
+		const VkAllocationCallbacks* allocator) {
+		
+		auto f = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+		if (f) {
+			f(instance, messenger, allocator);
+		}
+	}
+
+	VideoContext::VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions)
+			: current_frame(0), app(app), want_recreate(false), validation_layers_enabled(enable_validation_layers) {
 		handle = new impl_VideoContext();
 
 		if (enable_validation_layers && !validation_layers_supported()) {
@@ -585,8 +628,19 @@ namespace vkr {
 		VkInstanceCreateInfo create_info{};
 		create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		create_info.pApplicationInfo = &app_info;
-		create_info.enabledExtensionCount = extension_count;
-		create_info.ppEnabledExtensionNames = extensions;
+
+		if (enable_validation_layers) {
+			auto exts = new const char*[extension_count + 1];
+			memcpy(exts, extensions, sizeof(const char*) * extension_count);
+
+			exts[extension_count] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+
+			create_info.enabledExtensionCount = extension_count + 1;
+			create_info.ppEnabledExtensionNames = exts;
+		} else {
+			create_info.enabledExtensionCount = extension_count;
+			create_info.ppEnabledExtensionNames = extensions;
+		}
 
 		if (enable_validation_layers) {
 			create_info.enabledLayerCount = sizeof(validation_layers) / sizeof(*validation_layers);
@@ -600,6 +654,24 @@ namespace vkr {
 		}
 
 		info("Vulkan instance created.");
+
+		if (enable_validation_layers) {
+			VkDebugUtilsMessengerCreateInfoEXT messenger_info{};
+			messenger_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+			messenger_info.messageSeverity =
+				VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+			messenger_info.messageType =
+				VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT    |
+				VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+			messenger_info.pfnUserCallback = debug_callback;
+
+			if (create_debug_utils_messenger_ext(handle->instance, &messenger_info, null, &handle->messenger) != VK_SUCCESS) {
+				abort_with("Failed to create debug messenger.");
+			}
+		}
 
 		/* Create the window surface */
 		if (!app.create_window_surface(*this)) {
@@ -752,6 +824,11 @@ namespace vkr {
 
 		vkDestroyDevice(handle->device, null);
 		vkDestroySurfaceKHR(handle->instance, handle->surface, null);
+
+		if (are_validation_layers_enabled()) {
+			destroy_debug_utils_messenger_ext(handle->instance, handle->messenger, null);
+		}
+
 		vkDestroyInstance(handle->instance, null);
 
 		delete[] handle->swapchain_images;
@@ -1775,7 +1852,7 @@ namespace vkr {
 
 				auto new_layout =
 					attachment->type == Attachment::Type::color ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL :
-					VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+					VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 				auto access = 
 					attachment->type == Attachment::Type::color ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT :
@@ -1826,7 +1903,7 @@ namespace vkr {
 
 				auto old_layout =
 					attachment->type == Attachment::Type::color ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL :
-					VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+					VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 				auto new_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 

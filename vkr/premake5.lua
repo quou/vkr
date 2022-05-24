@@ -52,11 +52,20 @@ project "vkr"
 		}
 	
 	filter "system:windows"
+		libdirs {
+			vk_lib_path	
+		}
+
+		includedirs {
+			vk_include_path
+		}
+
 		links {
 			"opengl32",
 			"user32",
 			"gdi32",
 			"kernel32",
+			"vulkan-1.lib"
 		}
 
 		defines {
