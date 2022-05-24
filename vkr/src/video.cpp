@@ -925,9 +925,13 @@ namespace vkr {
 
 		vkWaitForFences(handle->device, 1, &handle->in_flight_fences[current_frame], VK_TRUE, UINT64_MAX);
 
-		auto r = vkAcquireNextImageKHR(handle->device, handle->swapchain, UINT64_MAX,
-			handle->image_avail_semaphores[current_frame], VK_NULL_HANDLE, &image_id);
-		if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR || want_recreate) {
+		VkResult r;
+		if (!want_recreate) {
+			r = vkAcquireNextImageKHR(handle->device, handle->swapchain, UINT64_MAX,
+				handle->image_avail_semaphores[current_frame], VK_NULL_HANDLE, &image_id);
+		}
+
+		if (want_recreate || r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) {
 			skip_frame = true;
 			want_recreate = false;
 			resize(app.get_size());

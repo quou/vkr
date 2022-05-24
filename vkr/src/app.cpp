@@ -54,6 +54,11 @@ namespace vkr {
 		while (!glfwWindowShouldClose(handle->window)) {
 			glfwPollEvents();
 
+			while (video->want_recreate && (size.x == 0 || size.y == 0)) {
+				glfwGetFramebufferSize(handle->window, &size.x, &size.y);
+				glfwWaitEvents();
+			}
+
 			video->begin();
 			on_update(ts);
 			video->end();

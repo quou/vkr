@@ -150,7 +150,7 @@ namespace vkr {
 	struct v3 {
 		T x, y, z;
 
-		v3() : x(0), y(0) {}
+		v3() : x(0), y(0), z(0) {}
 		v3(T xyz) : x(xyz), y(xyz), z(xyz) {}
 		v3(v2<T> xy, T z) : x(xy.x), y(xy.y), z(z) {}
 		v3(T x, v2<T> yz) : x(x), y(yz.x), z(yz.y) {}
@@ -287,7 +287,7 @@ namespace vkr {
 	struct v4 {
 		T x, y, z, w;
 
-		v4() : x(0), y(0), z(0) {}
+		v4() : x(0), y(0), z(0), w(0) {}
 		v4(T xyzw) : x(xyzw), y(xyzw), z(xyzw), w(xyzw) {}
 		v4(v2<T> xy, T z, T w) : x(xy.x), y(xy.y), z(z), w(w) {}
 		v4(v3<T> xyz, T w) : x(xyz.x), y(xyz.y), z(xyz.z), w(w) {}
