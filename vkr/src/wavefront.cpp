@@ -4,6 +4,10 @@
 #include "wavefront.hpp"
 #include "vkr.hpp"
 
+#ifdef _WIN32
+#define strtok_r strtok_s
+#endif
+
 namespace vkr {
 	static bool is_digit(char c) {
 		return c >= '0' && c <= '9';
@@ -76,7 +80,7 @@ namespace vkr {
 
 		usize i = 0;
 
-		while ((token = strtok_s(save, "/", &save)) && i < 3) {
+		while ((token = strtok_r(save, "/", &save)) && i < 3) {
 			usize* v = null;
 
 			switch (i) {
@@ -112,7 +116,7 @@ namespace vkr {
 		std::vector<char*> tokens;
 		
 		/* Split by space. */
-		while ((token = strtok_s(save, " ", &save))) {
+		while ((token = strtok_r(save, " ", &save))) {
 			tokens.push_back(copy_string(token));
 		}
 
