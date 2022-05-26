@@ -90,7 +90,7 @@ namespace vkr {
 
 	PostProcessStep::~PostProcessStep() {
 		delete pipeline;
-		if (use_default_fb) {
+		if (!use_default_fb) {
 			delete framebuffer;
 		}
 	}
@@ -288,6 +288,8 @@ namespace vkr {
 	Renderer3D::~Renderer3D() {
 		delete fullscreen_tri;
 		delete scene_fb;
+		delete shadow_pip;
+		delete shadow_fb;
 		delete tonemap;
 		delete scene_pip;
 
