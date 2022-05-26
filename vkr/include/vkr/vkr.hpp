@@ -83,6 +83,7 @@ namespace vkr {
 			default_fb    = 1 << 0, /* To be managed by the video context only. */
 			headless      = 1 << 1, /* Creates a sampler to be sampled from a shader. */
 			fit           = 1 << 2, /* Fit the framebuffer to the window (Re-create it on window resize). */
+			shadow        = 1 << 3, /* The sampler created with this framebuffer will allow sampler2DShadow. */
 		} flags;
 
 		struct Attachment {

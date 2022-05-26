@@ -133,7 +133,7 @@ namespace vkr {
 			app->get_size(), attachments, 2);
 
 		shadow_fb = new Framebuffer(video,
-			Framebuffer::Flags::headless,
+			Framebuffer::Flags::headless | Framebuffer::Flags::shadow,
 			v2i(1024, 1024), &shadow_attachment, 1);
 
 		Pipeline::Attribute attribs[] = {

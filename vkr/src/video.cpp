@@ -500,9 +500,7 @@ namespace vkr {
 
 	static VkFormat find_depth_format(impl_VideoContext* handle) {
 		VkFormat formats[] = {
-			VK_FORMAT_D32_SFLOAT,
-			VK_FORMAT_D32_SFLOAT_S8_UINT,
-			VK_FORMAT_D24_UNORM_S8_UINT
+			VK_FORMAT_D32_SFLOAT
 		};
 
 		return find_supported_format(handle, formats, 3, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
@@ -1516,8 +1514,8 @@ namespace vkr {
 			sampler_info.anisotropyEnable = VK_FALSE;
 			sampler_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 			sampler_info.unnormalizedCoordinates = VK_FALSE;
-			sampler_info.compareEnable = VK_FALSE;
-			sampler_info.compareOp = VK_COMPARE_OP_ALWAYS;
+			sampler_info.compareEnable = (flags & Flags::shadow) ? VK_TRUE            : VK_FALSE;
+			sampler_info.compareOp     = (flags & Flags::shadow) ? VK_COMPARE_OP_LESS : VK_COMPARE_OP_ALWAYS;
 			sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
 			if (vkCreateSampler(video->handle->device, &sampler_info, null, &handle->sampler) != VK_SUCCESS) {

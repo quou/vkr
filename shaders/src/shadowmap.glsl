@@ -21,6 +21,8 @@ void main() {
 
 #begin FRAGMENT
 
-void main() {}
+void main() {
+	gl_FragDepth = gl_FragCoord.z;
+}
 
 #end FRAGMENT

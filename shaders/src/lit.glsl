@@ -85,7 +85,7 @@ layout (push_constant) uniform PushData {
 layout (set = 1, binding = 0) uniform sampler2D diffuse_map;
 layout (set = 1, binding = 1) uniform sampler2D normal_map;
 
-layout (set = 0, binding = 2) uniform sampler2D shadowmap;
+layout (set = 0, binding = 2) uniform sampler2DShadow shadowmap;
 
 vec3 compute_point_light(vec3 normal, vec3 view_dir, PointLight light) {
 	vec3 light_dir = normalize(light.position - fs_in.world_pos);
@@ -129,8 +129,7 @@ vec3 compute_directional_light(vec3 normal, vec3 view_dir, DirectionalLight ligh
 	vec3 proj_coords = fs_in.sun_pos.xyz / fs_in.sun_pos.w;
 	proj_coords.xy = proj_coords.xy * 0.5 + 0.5;
 
-	shadow = texture(shadowmap, proj_coords.xy).r;
-	shadow = proj_coords.z > shadow ? 0.0 : 1.0;
+	shadow = texture(shadowmap, vec3(proj_coords.xy, proj_coords.z)).r;
 
 	return shadow * (diffuse + specular);
 }
