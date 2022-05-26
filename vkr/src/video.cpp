@@ -629,8 +629,10 @@ namespace vkr {
 		create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		create_info.pApplicationInfo = &app_info;
 
+		const char** exts = null;
+
 		if (enable_validation_layers) {
-			auto exts = new const char*[extension_count + 1];
+			exts = new const char*[extension_count + 1];
 			memcpy(exts, extensions, sizeof(const char*) * extension_count);
 
 			exts[extension_count] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
@@ -652,6 +654,8 @@ namespace vkr {
 			error("vkCreateInstance failed with code %d.", r);
 			abort_with("Failed to create Vulkan instance.");
 		}
+
+		delete[] exts;
 
 		info("Vulkan instance created.");
 
@@ -1252,15 +1256,26 @@ namespace vkr {
 				abort_with("Failed to allocate descriptor sets.");
 			}
 
-			std::vector<VkDescriptorImageInfo>  image_infos;
-			std::vector<VkDescriptorBufferInfo> buffer_infos;
+			auto image_infos = new VkDescriptorImageInfo[max_frames_in_flight];
+			usize image_info_count = 0;
+			auto buffer_infos = new VkDescriptorBufferInfo[max_frames_in_flight];
+			usize buffer_info_count = 0;
 
 			/* Write the descriptor set and create uniform buffers if necessary. */
 			for (usize ii = 0, ui = 0; ii < set->count; ii++) {
-				image_infos.clear();
-				buffer_infos.clear();
-
 				VkWriteDescriptorSet desc_writes[max_frames_in_flight] = {};
+
+				usize uniform_index;
+
+				if (set->descriptors[ii].resource.type == ResourcePointer::Type::uniform_buffer) {
+						uniform_index = ui++;
+
+						handle->uniforms[uniform_index].ptr = set->descriptors[ii].resource.uniform.ptr;
+						handle->uniforms[uniform_index].size = set->descriptors[ii].resource.uniform.size;
+				}
+
+				image_info_count = 0;
+				buffer_info_count = 0;
 
 				for (usize j = 0; j < max_frames_in_flight; j++) {
 					auto write = desc_writes + j;
@@ -1275,40 +1290,29 @@ namespace vkr {
 						case ResourcePointer::Type::texture: {
 							auto t = set->descriptors[ii].resource.texture.ptr;
 
-							image_infos.resize(image_infos.size() + 1);
+							auto image_info = image_infos + (image_info_count++);
 
-							VkDescriptorImageInfo image_info{};
-							image_info.imageView   = t->handle->view;
-							image_info.sampler     = t->handle->sampler;
-							image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-							image_infos.push_back(image_info);
+							image_info->imageView   = t->handle->view;
+							image_info->sampler     = t->handle->sampler;
+							image_info->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 							write->descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-							write->pImageInfo = &image_infos[image_infos.size() - 1];
+							write->pImageInfo = image_info;
 						} break;
 						case ResourcePointer::Type::framebuffer_output: {	
 							auto fb = set->descriptors[ii].resource.framebuffer.ptr;
 							auto attachment = set->descriptors[ii].resource.framebuffer.attachment;
 
-							image_infos.resize(image_infos.size() + 1);
+							auto image_info = image_infos + (image_info_count++);
 
-							VkDescriptorImageInfo image_info{};
-							image_info.imageView   = fb->handle->attachment_map[attachment]->image_views[j];
-							image_info.sampler     = fb->handle->sampler;
-							image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-							image_infos.push_back(image_info);
+							image_info->imageView   = fb->handle->attachment_map[attachment]->image_views[j];
+							image_info->sampler     = fb->handle->sampler;
+							image_info->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 							write->descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-							write->pImageInfo = &image_infos[image_infos.size() - 1];
+							write->pImageInfo = image_info;
 						} break;
 						case ResourcePointer::Type::uniform_buffer: {
-							auto uniform_index = ui++;
-
-							handle->uniforms[uniform_index].ptr = set->descriptors[ii].resource.uniform.ptr;
-							handle->uniforms[uniform_index].size = set->descriptors[ii].resource.uniform.size;
-
 							new_buffer(video->handle, (VkDeviceSize)handle->uniforms[uniform_index].size,
 								VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 								VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -1316,15 +1320,14 @@ namespace vkr {
 								handle->uniforms[uniform_index].buffers + j,
 								handle->uniforms[uniform_index].memories + j);
 
-							VkDescriptorBufferInfo buffer_info{};
-							buffer_info.buffer = handle->uniforms[uniform_index].buffers[j];
-							buffer_info.offset = 0;
-							buffer_info.range = handle->uniforms[uniform_index].size;
+							auto buffer_info = buffer_infos + (buffer_info_count++);
 
-							buffer_infos.push_back(buffer_info);
+							buffer_info->buffer = handle->uniforms[uniform_index].buffers[j];
+							buffer_info->offset = 0;
+							buffer_info->range = handle->uniforms[uniform_index].size;
 
 							write->descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-							write->pBufferInfo = &buffer_infos[buffer_infos.size() - 1];
+							write->pBufferInfo = buffer_info;
 						} break;
 						default:
 							abort_with("Invalid resource pointer type on descriptor.");
@@ -1334,6 +1337,9 @@ namespace vkr {
 
 				vkUpdateDescriptorSets(video->handle->device, max_frames_in_flight, desc_writes, 0, null);
 			}
+
+			delete[] image_infos;
+			delete[] buffer_infos;
 
 			delete[] layout_bindings;
 		}

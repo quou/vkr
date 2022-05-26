@@ -86,6 +86,8 @@ namespace vkr {
 			post_attribs, 2,
 			framebuffer,
 			desc_sets, 2);
+
+		delete[] sampler_descs;
 	}
 
 	PostProcessStep::~PostProcessStep() {
