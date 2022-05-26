@@ -5,8 +5,8 @@
 
 
 static const vkr::u32 default_texture_data[2][2] = {
-	0xff00ffff, 0x000000ff,
-	0x000000ff, 0xff00ffff
+	0xffff00ff, 0xff000000,
+	0xff000000, 0xffff00ff
 };
 
 namespace vkr {
@@ -209,12 +209,6 @@ namespace vkr {
 		uniform_descs[2].resource.framebuffer.ptr = shadow_fb;
 		uniform_descs[2].resource.framebuffer.attachment = 0;
 
-		Pipeline::DescriptorSet shadow_desc_set = {
-			.name = "uniforms",
-			.descriptors = uniform_descs,
-			.count = 1
-		};
-
 		auto desc_sets = new Pipeline::DescriptorSet[1 + material_count]();
 		desc_sets[0].name = "uniforms";
 		desc_sets[0].descriptors = uniform_descs;
@@ -251,14 +245,29 @@ namespace vkr {
 			desc_sets, material_count + 1,
 			pc, 2);
 
+		Pipeline::Descriptor shadow_uniform_descs[1];
+		shadow_uniform_descs[0].name = "vertex_uniform_buffer";
+		shadow_uniform_descs[0].binding = 0;
+		shadow_uniform_descs[0].stage = Pipeline::Stage::vertex;
+		shadow_uniform_descs[0].resource.type = Pipeline::ResourcePointer::Type::uniform_buffer;
+		shadow_uniform_descs[0].resource.uniform.ptr  = &shadow_v_ub;
+		shadow_uniform_descs[0].resource.uniform.size = sizeof(shadow_v_ub);
+
+		Pipeline::DescriptorSet shadow_desc_set = {
+			.name = "uniforms",
+			.descriptors = shadow_uniform_descs,
+			.count = 1
+		};
+
 		shadow_pip = new Pipeline(video,
 			Pipeline::Flags::depth_test |
-			Pipeline::Flags::cull_back_face,
+			Pipeline::Flags::cull_front_face |
+			Pipeline::Flags::front_face_clockwise,
 			shaders.shadowmap,
 			sizeof(Vertex),
 			attribs, 1,
 			shadow_fb,
-			desc_sets, 1,
+			&shadow_desc_set, 1,
 			pc, 1);
 
 		v2f tri_verts[] = {
@@ -324,12 +333,12 @@ namespace vkr {
 			scene_aabb.max.z = std::max(scene_aabb.max.z, model_aabb.max.z);
 		}
 
-		v_ub.view = m4f::lookat(
+		shadow_v_ub.view = m4f::lookat(
 			sun.direction,
 			v3f(0.0f, 0.0f, 0.0f),
 			v3f(0.0f, 1.0f, 0.0f));
 
-		scene_aabb = m4f::transform(v_ub.view, scene_aabb);
+		scene_aabb = m4f::transform(shadow_v_ub.view, scene_aabb);
 
 		float z_mul = 3.0f;
 		if (scene_aabb.min.z < 0.0f) {
@@ -344,10 +353,12 @@ namespace vkr {
 			scene_aabb.max.z *= z_mul;
 		}
 
-		v_ub.projection = m4f::orth(
+		shadow_v_ub.projection = m4f::orth(
 			scene_aabb.min.x, scene_aabb.max.x,
 			scene_aabb.min.y, scene_aabb.max.y,
 			scene_aabb.min.z, scene_aabb.max.z);
+
+		v_ub.sun_matrix = shadow_v_ub.projection * shadow_v_ub.view;
 
 		shadow_pip->begin();
 

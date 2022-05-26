@@ -11,6 +11,7 @@ layout (location = 4) in vec3 bitangent;
 layout (binding = 0) uniform VertexBuffer {
 	mat4 view;
 	mat4 projection;
+	mat4 sun_matrix;
 } data;
 
 layout (push_constant) uniform PushData {
@@ -21,6 +22,7 @@ layout (location = 0) out VertexOut {
 	mat3 tbn;
 	vec3 world_pos;
 	vec2 uv;
+	vec4 sun_pos;
 } vs_out;
 
 void main() {
@@ -32,6 +34,7 @@ void main() {
 	vec3 b = normalize(vec3(push_data.transform * vec4(bitangent, 0.0)));
 
 	vs_out.tbn = mat3(t, b, n);
+	vs_out.sun_pos = data.sun_matrix * vec4(vs_out.world_pos, 1.0);
 
 	gl_Position = data.projection * data.view * vec4(vs_out.world_pos, 1.0);
 }
@@ -70,6 +73,7 @@ layout (location = 0) in VertexOut {
 	mat3 tbn;
 	vec3 world_pos;
 	vec2 uv;
+	vec4 sun_pos;
 } fs_in;
 
 layout (push_constant) uniform PushData {
@@ -120,7 +124,15 @@ vec3 compute_directional_light(vec3 normal, vec3 view_dir, DirectionalLight ligh
 		light.intensity *
 		pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
 
-	return diffuse + specular;
+	float shadow = 0.0;
+
+	vec3 proj_coords = fs_in.sun_pos.xyz / fs_in.sun_pos.w;
+	proj_coords.xy = proj_coords.xy * 0.5 + 0.5;
+
+	shadow = texture(shadowmap, proj_coords.xy).r;
+	shadow = proj_coords.z > shadow ? 0.0 : 1.0;
+
+	return shadow * (diffuse + specular);
 }
 
 void main() {

@@ -70,8 +70,12 @@ namespace vkr {
 		};
 
 		struct {
-			m4f view, projection;
+			m4f view, projection, sun_matrix;
 		} v_ub;
+
+		struct {
+			m4f view, projection;
+		} shadow_v_ub;
 
 		struct {
 			alignas(16) v3f camera_pos;

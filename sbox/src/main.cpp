@@ -82,7 +82,7 @@ public:
 			.range = 2.0f
 			});
 		
-		renderer->sun.direction = v3f(0.3f, 1.0f, 0.3f);
+		renderer->sun.direction = v3f(0.3f, 1.0f, 0.8f);
 		renderer->sun.intensity = 1.0f;
 		renderer->sun.specular = v3f(1.0f, 1.0f, 1.0f);
 		renderer->sun.diffuse = v3f(1.0f, 1.0f, 1.0f);
@@ -96,7 +96,7 @@ public:
 		monkey2.add(Renderable3D { monkey, 1 });
 
 		monkey3 = world.new_entity();
-		monkey3.add(Transform { m4f::translate(m4f::identity(), v3f(2.5f, 0.0f, 0.0f)) });
+		monkey3.add(Transform { m4f::translate(m4f::identity(), v3f(2.5f, -1.5f, 0.0f)) });
 		monkey3.add(Renderable3D { monkey, 1 });
 
 		ground = world.new_entity();

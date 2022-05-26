@@ -1108,7 +1108,9 @@ namespace vkr {
 			(flags & Flags::cull_back_face)  ? VK_CULL_MODE_BACK_BIT :
 			(flags & Flags::cull_front_face) ? VK_CULL_MODE_FRONT_BIT :
 			VK_CULL_MODE_NONE;
-		rasteriser.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		rasteriser.frontFace =
+			(flags & Flags::front_face_clockwise) ? VK_FRONT_FACE_CLOCKWISE :
+			VK_FRONT_FACE_COUNTER_CLOCKWISE;
 		rasteriser.depthBiasEnable = VK_FALSE;
 
 		VkPipelineMultisampleStateCreateInfo multisampling{};

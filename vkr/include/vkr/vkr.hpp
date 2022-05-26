@@ -206,9 +206,11 @@ namespace vkr {
 		};
 
 		enum class Flags {
-			depth_test       = 1 << 0,
-			cull_back_face   = 1 << 1,
-			cull_front_face  = 1 << 2,
+			depth_test                   = 1 << 0,
+			cull_back_face               = 1 << 1,
+			cull_front_face              = 1 << 2,
+			front_face_clockwise         = 1 << 3,
+			front_face_counter_clockwise = 1 << 4,
 		} flags;
 
 		Pipeline(VideoContext* video, Flags flags, Shader* shader, usize stride,
