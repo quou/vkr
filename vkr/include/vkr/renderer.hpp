@@ -117,6 +117,9 @@ namespace vkr {
 		Framebuffer* scene_fb;
 		Framebuffer* shadow_fb;
 
+		Sampler* shadow_sampler;
+		Sampler* fb_sampler;
+
 		Model3D* model;
 
 		Material* materials;

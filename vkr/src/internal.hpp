@@ -93,6 +93,10 @@ namespace vkr {
 		}
 	};
 
+	struct impl_Sampler {
+		VkSampler sampler;
+	};
+
 	struct impl_Framebuffer {
 		VkRenderPass render_pass;
 
@@ -122,8 +126,6 @@ namespace vkr {
 
 		VkClearValue* clear_colors;
 		usize clear_color_count;
-
-		VkSampler sampler;
 
 		VkFramebuffer get_current_framebuffer(u32 image_id, u32 current_frame) const {
 			if (is_headless) {

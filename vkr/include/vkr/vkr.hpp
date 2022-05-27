@@ -29,11 +29,12 @@ namespace vkr {
 	 * namely glfw3.h and vulkan.h. */
 	struct impl_App;
 	struct impl_Buffer;
+	struct impl_Framebuffer;
 	struct impl_Pipeline;
+	struct impl_Sampler;
 	struct impl_Shader;
 	struct impl_Texture;
 	struct impl_VideoContext;
-	struct impl_Framebuffer;
 
 	/* To be inherited by client applications to provide custom
 	 * functionality and data. */
@@ -83,7 +84,6 @@ namespace vkr {
 			default_fb    = 1 << 0, /* To be managed by the video context only. */
 			headless      = 1 << 1, /* Creates a sampler to be sampled from a shader. */
 			fit           = 1 << 2, /* Fit the framebuffer to the window (Re-create it on window resize). */
-			shadow        = 1 << 3, /* The sampler created with this framebuffer will allow sampler2DShadow. */
 		} flags;
 
 		struct Attachment {
@@ -177,6 +177,7 @@ namespace vkr {
 
 				struct {
 					Framebuffer* ptr;
+					Sampler* sampler;
 					u32 attachment;
 				} framebuffer;
 			};
@@ -284,6 +285,32 @@ namespace vkr {
 
 		void draw();
 	};
+
+	class VKR_API Sampler {
+	private:
+		impl_Sampler* handle;
+
+		VideoContext* video;
+
+		friend class Pipeline;
+	public:
+		enum Flags {
+			filter_linear = 1 << 0,
+			filter_none   = 1 << 1,
+			shadow        = 1 << 1,
+		} flags;
+
+		Sampler(VideoContext* video, Flags flags);
+		~Sampler();
+	};
+
+	inline Sampler::Flags operator|(Sampler::Flags a, Sampler::Flags b) {
+		return static_cast<Sampler::Flags>(static_cast<i32>(a) | static_cast<i32>(b));
+	}
+
+	inline i32 operator&(Sampler::Flags a, Sampler::Flags b) {
+		return static_cast<i32>(a) & static_cast<i32>(b);
+	}
 
 	class VKR_API Texture {
 	private:

@@ -1302,11 +1302,12 @@ namespace vkr {
 						case ResourcePointer::Type::framebuffer_output: {	
 							auto fb = set->descriptors[ii].resource.framebuffer.ptr;
 							auto attachment = set->descriptors[ii].resource.framebuffer.attachment;
+							auto sampler_ptr = set->descriptors[ii].resource.framebuffer.sampler;
 
 							auto image_info = image_infos + (image_info_count++);
 
 							image_info->imageView   = fb->handle->attachment_map[attachment]->image_views[j];
-							image_info->sampler     = fb->handle->sampler;
+							image_info->sampler     = sampler_ptr->handle->sampler;
 							image_info->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 							write->descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1502,26 +1503,6 @@ namespace vkr {
 		handle = new impl_Framebuffer();
 
 		handle->is_headless = flags & Flags::headless;
-
-		if (handle->is_headless) {
-			VkSamplerCreateInfo sampler_info{};
-			sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-			sampler_info.magFilter = VK_FILTER_LINEAR;
-			sampler_info.minFilter = VK_FILTER_LINEAR;
-			sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-			sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-			sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-			sampler_info.anisotropyEnable = VK_FALSE;
-			sampler_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-			sampler_info.unnormalizedCoordinates = VK_FALSE;
-			sampler_info.compareEnable = (flags & Flags::shadow) ? VK_TRUE            : VK_FALSE;
-			sampler_info.compareOp     = (flags & Flags::shadow) ? VK_COMPARE_OP_LESS : VK_COMPARE_OP_ALWAYS;
-			sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-
-			if (vkCreateSampler(video->handle->device, &sampler_info, null, &handle->sampler) != VK_SUCCESS) {
-				abort_with("Failed to create framebuffer sampler.");
-			}
-		}
 
 		bool use_depth = false;
 
@@ -1822,8 +1803,6 @@ namespace vkr {
 
 			delete[] handle->swapchain_framebuffers;
 		} else if (flags & Flags::headless) {
-			vkDestroySampler(video->handle->device, handle->sampler, null);
-
 			if (depth_enable) {
 				for (u32 i = 0; i < max_frames_in_flight; i++) {
 					vkDestroyImageView(video->handle->device, handle->depth.image_views[i], null);
@@ -2039,6 +2018,36 @@ namespace vkr {
 		vkCmdDrawIndexed(video->handle->command_buffers[video->current_frame], count, 1, 0, 0, 0);
 
 		video->object_count++;
+	}
+
+	Sampler::Sampler(VideoContext* video, Flags flags) : video(video) {
+		handle = new impl_Sampler();
+
+		VkSamplerCreateInfo sampler_info{};
+		sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		sampler_info.magFilter = (flags & Flags::filter_linear) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+		sampler_info.minFilter = (flags & Flags::filter_linear) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+		sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		sampler_info.anisotropyEnable = VK_FALSE;
+		sampler_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+		sampler_info.unnormalizedCoordinates = VK_FALSE;
+		sampler_info.compareEnable = (flags & Flags::shadow) ? VK_TRUE            : VK_FALSE;
+		sampler_info.compareOp     = (flags & Flags::shadow) ? VK_COMPARE_OP_LESS : VK_COMPARE_OP_ALWAYS;
+		sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+		if (vkCreateSampler(video->handle->device, &sampler_info, null, &handle->sampler) != VK_SUCCESS) {
+			abort_with("Failed to create sampler.");
+		}
+	}
+
+	Sampler::~Sampler() {
+		video->wait_for_done();
+
+		vkDestroySampler(video->handle->device, handle->sampler, null);
+
+		delete handle;
 	}
 
 	Texture::Texture(VideoContext* video, const void* data, v2i size, Flags flags) :

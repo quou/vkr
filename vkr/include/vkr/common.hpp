@@ -39,11 +39,12 @@ namespace vkr {
 	/* Class forward declarations. */
 	class App;
 	class Buffer;
-	class IndexBuffer;
 	class Framebuffer;
+	class IndexBuffer;
 	class Pipeline;
-	class Texture;
+	class Sampler;
 	class Shader;
+	class Texture;
 	class UniformBuffer;
 	class VertexBuffer;
 	class VideoContext;

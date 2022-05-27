@@ -63,6 +63,7 @@ namespace vkr {
 			sampler_descs[i].stage = Pipeline::Stage::fragment;
 			sampler_descs[i].resource.type = Pipeline::ResourcePointer::Type::framebuffer_output;
 			sampler_descs[i].resource.framebuffer.ptr = dependencies[i].framebuffer;
+			sampler_descs[i].resource.framebuffer.sampler = renderer->fb_sampler;
 			sampler_descs[i].resource.framebuffer.attachment = dependencies[i].attachment;
 		}
 
@@ -109,6 +110,9 @@ namespace vkr {
 
 	Renderer3D::Renderer3D(App* app, VideoContext* video, const ShaderConfig& shaders, Material* materials, usize material_count) :
 		app(app), model(null) {
+
+		shadow_sampler = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow);
+		fb_sampler     = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow);
 
 		default_texture = new Texture(video, (const void*)default_texture_data, v2i(2, 2),
 			Texture::Flags::dimentions_2 | Texture::Flags::filter_none | Texture::Flags::format_rgba8);
@@ -188,7 +192,7 @@ namespace vkr {
 		this->materials = new Material[material_count]();
 		memcpy(this->materials, materials, material_count * sizeof(Material));
 
-		Pipeline::Descriptor uniform_descs[3];
+		Pipeline::Descriptor uniform_descs[4];
 		uniform_descs[0].name = "vertex_uniform_buffer";
 		uniform_descs[0].binding = 0;
 		uniform_descs[0].stage = Pipeline::Stage::vertex;
@@ -203,17 +207,26 @@ namespace vkr {
 		uniform_descs[1].resource.uniform.ptr  = &f_ub;
 		uniform_descs[1].resource.uniform.size = sizeof(f_ub);
 
-		uniform_descs[2].name = "shadowmap";
+		uniform_descs[2].name = "blockermap";
 		uniform_descs[2].binding = 2;
 		uniform_descs[2].stage = Pipeline::Stage::fragment;
 		uniform_descs[2].resource.type = Pipeline::ResourcePointer::Type::framebuffer_output;
 		uniform_descs[2].resource.framebuffer.ptr = shadow_fb;
+		uniform_descs[2].resource.framebuffer.sampler = fb_sampler;
 		uniform_descs[2].resource.framebuffer.attachment = 0;
+
+		uniform_descs[3].name = "shadowmap";
+		uniform_descs[3].binding = 3;
+		uniform_descs[3].stage = Pipeline::Stage::fragment;
+		uniform_descs[3].resource.type = Pipeline::ResourcePointer::Type::framebuffer_output;
+		uniform_descs[3].resource.framebuffer.ptr = shadow_fb;
+		uniform_descs[3].resource.framebuffer.sampler = shadow_sampler;
+		uniform_descs[3].resource.framebuffer.attachment = 0;
 
 		auto desc_sets = new Pipeline::DescriptorSet[1 + material_count]();
 		desc_sets[0].name = "uniforms";
 		desc_sets[0].descriptors = uniform_descs;
-		desc_sets[0].count = 3;
+		desc_sets[0].count = 4;
 
 		for (usize i = 0; i < material_count; i++) {
 			auto set = desc_sets + i + 1;
@@ -298,6 +311,9 @@ namespace vkr {
 	}
 
 	Renderer3D::~Renderer3D() {
+		delete shadow_sampler;
+		delete fb_sampler;
+
 		delete fullscreen_tri;
 		delete scene_fb;
 		delete shadow_pip;
