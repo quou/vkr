@@ -1,3 +1,6 @@
+#include <time.h>
+#include <stdlib.h>
+
 #include <GLFW/glfw3.h>
 
 #include "vkr.hpp"
@@ -19,6 +22,8 @@ namespace vkr {
 	App::App(const char* title, v2i size) : handle(null), title(title), size(size) {}
 
 	void App::run() {
+		srand(time(0));
+
 		handle = new impl_App();
 
 		glfwInit();

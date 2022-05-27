@@ -79,6 +79,11 @@ namespace vkr {
 
 		struct {
 			alignas(16) v3f camera_pos;
+			alignas(4) f32 near_plane;
+			alignas(4) f32 far_plane;
+
+			alignas(4) f32 fov;
+			alignas(4) f32 aspect;
 
 			impl_DirectionalLight sun;
 

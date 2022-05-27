@@ -291,18 +291,41 @@ namespace vkr {
 		impl_Texture* handle;
 
 		v2i size;
-		u32 component_count;
 
 		friend class Pipeline;
 	public:
-		Texture(VideoContext* video, const void* data, v2i size, u32 component_count);
+		enum class Flags {
+			dimentions_1  = 1 << 0,
+			dimentions_2  = 1 << 1,
+			dimentions_3  = 1 << 2,
+			filter_linear = 1 << 3,
+			filter_none   = 1 << 4,
+			format_grey8  = 1 << 5,
+			format_rgb8   = 1 << 6,
+			format_rgba8  = 1 << 7,
+			format_grey16 = 1 << 8,
+			format_rgb16  = 1 << 9,
+			format_rgba16 = 1 << 10,
+			format_grey32 = 1 << 11,
+			format_rgb32  = 1 << 12,
+			format_rgba32 = 1 << 13
+		} flags;
+
+		Texture(VideoContext* video, const void* data, v2i size, Flags flags);
 		~Texture();
 
-		static Texture* from_file(VideoContext* video, const char* file_path);
+		static Texture* from_file(VideoContext* video, const char* file_path, Flags flags = Flags::filter_none);
 
 		inline v2i get_size() const { return size; }
-		inline u32 get_component_count() const { return component_count; }
 	};
+
+	inline Texture::Flags operator|(Texture::Flags a, Texture::Flags b) {
+		return static_cast<Texture::Flags>(static_cast<i32>(a) | static_cast<i32>(b));
+	}
+
+	inline i32 operator&(Texture::Flags a, Texture::Flags b) {
+		return static_cast<i32>(a) & static_cast<i32>(b);
+	}
 
 	class VKR_API VideoContext {
 	private:

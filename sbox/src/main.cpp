@@ -22,8 +22,8 @@ private:
 
 	ecs::World world;
 
-	ecs::Entity monkey1, monkey2, monkey3;
-	ecs::Entity ground;
+	ecs::Entity monkey1, monkey2;
+	ecs::Entity ground, monolith;
 
 	ecs::Entity red_light, blue_light;
 public:
@@ -44,7 +44,7 @@ public:
 		monkey = Model3D::from_wavefront(video, monkey_obj);
 		delete monkey_obj;
 
-		auto cube_obj = WavefrontModel::from_file("res/models/floor.obj");
+		auto cube_obj = WavefrontModel::from_file("res/models/cube.obj");
 		cube = Model3D::from_wavefront(video, cube_obj);
 		delete cube_obj;
 
@@ -59,10 +59,14 @@ public:
 			},
 			{
 				.diffuse = wood_a,
+			},
+			{
+				.diffuse = null,
+				.normal = null
 			}
 		};
 
-		renderer = new Renderer3D(this, video, shaders, materials, 2);
+		renderer = new Renderer3D(this, video, shaders, materials, 3);
 
 		red_light = world.new_entity();
 		red_light.add(Transform { m4f::translate(m4f::identity(), v3f(-2.0f, 1.0f, 1.0f)) });
@@ -95,13 +99,17 @@ public:
 		monkey2.add(Transform { m4f::identity() });
 		monkey2.add(Renderable3D { monkey, 1 });
 
-		monkey3 = world.new_entity();
-		monkey3.add(Transform { m4f::translate(m4f::identity(), v3f(2.5f, -1.5f, 0.0f)) });
-		monkey3.add(Renderable3D { monkey, 1 });
-
 		ground = world.new_entity();
-		ground.add(Transform { m4f::translate(m4f::identity(), v3f(0.0f, -2.0f, 0.0f)) });
-		ground.add(Renderable3D { cube, 0 });
+		ground.add(Transform {
+			m4f::translate(m4f::identity(), v3f(0.0f, -2.0f, 0.0f)) *
+			m4f::scale(m4f::identity(), v3f(10.0f, 0.1f, 10.0f))});
+		ground.add(Renderable3D { cube, 2 });
+
+		monolith = world.new_entity();
+		monolith.add(Transform {
+			m4f::translate(m4f::identity(), v3f(2.5f, -2.0f, 0.0f)) *
+			m4f::scale(m4f::identity(), v3f(1.0f, 5.0f, 1.0f))});
+		monolith.add(Renderable3D { cube, 2 });
 	}
 
 	void on_update(f64 ts) override {

@@ -110,7 +110,8 @@ namespace vkr {
 	Renderer3D::Renderer3D(App* app, VideoContext* video, const ShaderConfig& shaders, Material* materials, usize material_count) :
 		app(app), model(null) {
 
-		default_texture = new Texture(video, (const void*)default_texture_data, v2i(2, 2), 4);
+		default_texture = new Texture(video, (const void*)default_texture_data, v2i(2, 2),
+			Texture::Flags::dimentions_2 | Texture::Flags::filter_none | Texture::Flags::format_rgba8);
 
 		Framebuffer::Attachment attachments[] = {
 			{
@@ -133,7 +134,7 @@ namespace vkr {
 			app->get_size(), attachments, 2);
 
 		shadow_fb = new Framebuffer(video,
-			Framebuffer::Flags::headless | Framebuffer::Flags::shadow,
+			Framebuffer::Flags::headless,
 			v2i(1024, 1024), &shadow_attachment, 1);
 
 		Pipeline::Attribute attribs[] = {
@@ -384,6 +385,10 @@ namespace vkr {
 		v_ub.view = m4f::translate(m4f::identity(), camera_pos);
 
 		f_ub.camera_pos = camera_pos;
+		f_ub.near_plane = 0.1f;
+		f_ub.far_plane = 100.0f;
+		f_ub.aspect = (f32)size.x / (f32)size.y;
+		f_ub.fov = to_rad(70.0f);
 
 		f_ub.point_light_count = 0;
 		for (ecs::View view = world->new_view<Transform, PointLight>(); view.valid(); view.next()) {

@@ -459,11 +459,11 @@ namespace vkr {
 		end_temp_command_buffer(handle, command_buffer);
 	}
 
-	static VkImageView new_image_view(impl_VideoContext* handle, VkImage image, VkFormat format, VkImageAspectFlags flags) {
+	static VkImageView new_image_view(impl_VideoContext* handle, VkImage image, VkFormat format, VkImageAspectFlags flags, VkImageViewType type = VK_IMAGE_VIEW_TYPE_2D) {
 		VkImageViewCreateInfo iv_create_info{};
 		iv_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		iv_create_info.image = image;
-		iv_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		iv_create_info.viewType = type;
 		iv_create_info.format = format;
 		iv_create_info.subresourceRange.aspectMask = flags;
 		iv_create_info.subresourceRange.baseMipLevel = 0;
@@ -2041,12 +2041,46 @@ namespace vkr {
 		video->object_count++;
 	}
 
-	Texture::Texture(VideoContext* video, const void* data, v2i size, u32 component_count) :
-		video(video), size(size), component_count(component_count) {
+	Texture::Texture(VideoContext* video, const void* data, v2i size, Flags flags) :
+		video(video), size(size), flags(flags) {
 
 		handle = new impl_Texture();
 
-		VkDeviceSize image_size = size.x * size.y * component_count;
+		/* Choose the format and component size from the flags. */
+		VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+		u32 component_size = 4;
+		if (flags & Flags::format_grey8) {
+			format = VK_FORMAT_R8_UNORM;
+			component_size = 1;
+		} else if (flags & Flags::format_rgb8) {
+			format = VK_FORMAT_R8G8B8_UNORM;
+			component_size = 3;
+		} else if (flags & Flags::format_rgba8) {
+			format = VK_FORMAT_R8G8B8A8_UNORM;
+			component_size = 4;
+		} else if (flags & Flags::format_grey16) {
+			format = VK_FORMAT_R16_SFLOAT;
+			component_size = 2;
+		} else if (flags & Flags::format_rgb16) {
+			format = VK_FORMAT_R16G16B16_SFLOAT;
+			component_size = 6;
+		} else if (flags & Flags::format_rgba16) {
+			format = VK_FORMAT_R16G16B16A16_SFLOAT;
+			component_size = 8;
+		} else if (flags & Flags::format_grey32) {
+			format = VK_FORMAT_R32_SFLOAT;
+			component_size = 4;
+		} else if (flags & Flags::format_rgb32) {
+			format = VK_FORMAT_R32G32B32_SFLOAT;
+			component_size = 12;
+		} else if (flags & Flags::format_rgba32) {
+			format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			component_size = 16;
+		} else {
+			warning("Non-existent texture format flags. Assuming VK_FORMAT_R8G8B8A8_UNORM.");
+		}
+
+		VkDeviceSize image_size = size.x * size.y * component_size;
 
 		VkBuffer stage_buffer;
 		VmaAllocation stage_buffer_memory;
@@ -2061,9 +2095,6 @@ namespace vkr {
 		memcpy(remote_data, data, image_size);
 		vmaUnmapMemory(video->handle->allocator, stage_buffer_memory);
 
-		/* TODO: Take this from the component count. */
-		auto format = VK_FORMAT_R8G8B8A8_UNORM;
-
 		new_image(video->handle, size, format, VK_IMAGE_TILING_OPTIMAL,
 			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			&handle->image, &handle->memory);
@@ -2076,21 +2107,7 @@ namespace vkr {
 	
 		vmaDestroyBuffer(video->handle->allocator, stage_buffer, stage_buffer_memory);
 
-		VkImageViewCreateInfo view_info{};
-		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		view_info.format = format;
-		view_info.image = handle->image;
-		view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		view_info.subresourceRange.baseMipLevel = 0;
-		view_info.subresourceRange.levelCount = 1;
-		view_info.subresourceRange.baseArrayLayer = 0;
-		view_info.subresourceRange.layerCount = 1;
-
-		/* TODO: use new_image_view for this instead. */
-		if (vkCreateImageView(video->handle->device, &view_info, null, &handle->view) != VK_SUCCESS) {
-			abort_with("Failed to create image view.");
-		}
+		handle->view = new_image_view(video->handle, handle->image, format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
 
 		/* Used to get the anisotropy level that the hardware supports. */
 		VkPhysicalDeviceProperties pprops{};
@@ -2124,7 +2141,7 @@ namespace vkr {
 		delete handle;
 	}
 
-	Texture* Texture::from_file(VideoContext* video, const char* file_path) {
+	Texture* Texture::from_file(VideoContext* video, const char* file_path, Flags flags) {
 		v2i size;
 		i32 channels;
 		void* data = stbi_load(file_path, &size.x, &size.y, &channels, 4);
@@ -2133,7 +2150,7 @@ namespace vkr {
 			return null;
 		}
 
-		Texture* r = new Texture(video, data, size, 4);
+		Texture* r = new Texture(video, data, size, Flags::dimentions_2 | Flags::format_rgba8);
 		
 		stbi_image_free(data);
 		
