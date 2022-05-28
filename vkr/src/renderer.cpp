@@ -1,6 +1,7 @@
 #include <string.h> /* memcpy */
 
 #include <stb_image.h>
+#include <stb_rect_pack.h>
 
 #include "renderer.hpp"
 #include "vkr.hpp"
@@ -604,10 +605,49 @@ namespace vkr {
 	Renderer2D::Renderer2D(VideoContext* video, Shader* shader, Bitmap** images, usize image_count, Framebuffer* framebuffer)
 		: video(video), framebuffer(framebuffer) {
 	
-		/* TODO: Pack the images onto a single texture. */
-		atlas = new Texture(video, images[0]->data, images[0]->size,
+		/* Dumb rectangle packing algorithm. It just lines up all of the bitmaps
+		 * next to each other in a single texture. It's super wasteful and stupid but
+		 * I don't know if I can be bothered making a proper algorithm for it. */
+		v2i final_size;
+		for (usize i = 0; i < image_count; i++) {
+		   auto image = images[i];
+
+		   final_size.x += image->size.x;
+		   final_size.y = std::max(final_size.y, image->size.y);
+		}
+
+		Pixel* atlas_data = new Pixel[final_size.x * final_size.y];
+		v2i dst_pos;
+		for (usize i = 0; i < image_count; i++) {
+			auto image = images[i];
+
+			Pixel* src = ((Pixel*)image->data);
+			Pixel* dst = atlas_data + (dst_pos.x + dst_pos.y * final_size.x);
+
+			i32 dx = final_size.x - image->size.x;
+
+			for (i32 y = 0; y < image->size.y; y++) {
+				for (i32 x = 0; x < image->size.x; x++) {
+					*dst = *src;
+
+					dst++;
+					src++;
+				}
+
+				dst += dx;
+			}
+
+			sub_atlases[image] = Rect { dst_pos.x, dst_pos.y, image->size.x, image->size.y };
+
+			dst_pos.x += image->size.x;
+		}
+
+		atlas = new Texture(video, atlas_data, final_size,
 			Texture::Flags::dimentions_2 | Texture::Flags::filter_none | Texture::Flags::format_rgba8);
 
+		delete[] atlas_data;
+
+		/* Set up the pipline. */
 		vb = new VertexBuffer(video, null, max_quads * verts_per_quad * sizeof(Vertex), true);
 
 		Pipeline::Attribute attribs[] = {
@@ -678,15 +718,37 @@ namespace vkr {
 		auto w = quad.dimentions.x;
 		auto h = quad.dimentions.y;
 
+		Rect rect;
+
+		if (quad.image) {
+			Rect bitmap_rect = sub_atlases[quad.image];
+
+			rect.x = std::max(bitmap_rect.x, quad.rect.x);
+			rect.y = std::max(bitmap_rect.y, quad.rect.y);
+			rect.w = std::min(bitmap_rect.w, quad.rect.w);
+			rect.h = std::min(bitmap_rect.h, quad.rect.h);
+		} else {
+			rect = quad.rect;
+		}
+
+		f32 tx, ty, tw, th;
+
+		if (quad.image) {
+			tx = (f32)rect.x / (f32)atlas->get_size().x;
+			ty = (f32)rect.y / (f32)atlas->get_size().y;
+			tw = (f32)rect.w / (f32)atlas->get_size().x;
+			th = (f32)rect.h / (f32)atlas->get_size().y;
+		}
+
 		f32 use_texture = quad.image ? 1.0f : 0.0f;
 
 		Vertex vertices[verts_per_quad] = {
-			{ { x,     y },     quad.color, { 0.0f, 0.0f }, use_texture },
-			{ { x + w, y + h }, quad.color, { 1.0f, 1.0f }, use_texture },
-			{ { x,     y + h }, quad.color, { 0.0f, 1.0f }, use_texture },
-			{ { x,     y },     quad.color, { 0.0f, 0.0f }, use_texture },
-			{ { x + w, y },     quad.color, { 1.0f, 0.0f }, use_texture },
-			{ { x + w, y + h }, quad.color, { 1.0f, 1.0f }, use_texture },
+			{ { x,     y },     quad.color, { tx,      ty      }, use_texture },
+			{ { x + w, y + h }, quad.color, { tx + tw, ty + th }, use_texture },
+			{ { x,     y + h }, quad.color, { tx,      ty + th }, use_texture },
+			{ { x,     y },     quad.color, { tx,      ty      }, use_texture },
+			{ { x + w, y },     quad.color, { tx + tw, ty      }, use_texture },
+			{ { x + w, y + h }, quad.color, { tx + tw, ty + th }, use_texture },
 		};
 
 		vb->update(vertices, sizeof(vertices), quad_count * verts_per_quad * sizeof(Vertex));

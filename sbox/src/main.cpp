@@ -20,6 +20,7 @@ private:
 	Renderer3D::ShaderConfig shaders;
 
 	Bitmap* test_sprite;
+	Bitmap* test_sprite2;
 
 	Texture* wall_a;
 	Texture* wall_n;
@@ -49,8 +50,13 @@ public:
 			"res/shaders/2d.frag.spv");
 
 		test_sprite = Bitmap::from_file("res/sprites/test.png");
+		test_sprite2 = Bitmap::from_file("res/sprites/test2.png");
 
-		renderer2d = new Renderer2D(video, sprite_shader, &test_sprite, 1, get_default_framebuffer());
+		Bitmap* sprites[] = {
+			test_sprite, test_sprite2
+		};
+
+		renderer2d = new Renderer2D(video, sprite_shader, sprites, 2, get_default_framebuffer());
 
 		auto monkey_obj = WavefrontModel::from_file("res/models/monkey.obj");
 		monkey = Model3D::from_wavefront(video, monkey_obj);
@@ -142,13 +148,15 @@ public:
 			.position = { 0.0f, 0.0f },
 			.dimentions = { 100.0f, 100.0 },
 			.color = { 1.0f, 1.0f, 1.0f, 1.0f },
+			.rect = { 0, 0, 64, 64 },
 			.image = test_sprite
 		});
 		renderer2d->push(Renderer2D::Quad {
-			.position = { 50.0f, 50.0f },
+			.position = { 100.0f, 50.0f },
 			.dimentions = { 100.0f, 100.0 },
 			.color = { 1.0f, 1.0f, 1.0f, 1.0f },
-			.image = test_sprite
+			.rect = { 0, 0, 22, 46 },
+			.image = test_sprite2
 		});
 		renderer2d->end();
 
@@ -171,6 +179,7 @@ public:
 		delete renderer2d;
 		delete sprite_shader;
 		test_sprite->free();
+		test_sprite2->free();
 	}
 };
 

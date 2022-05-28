@@ -213,6 +213,10 @@ namespace vkr {
 			f32 use_texture;
 		};
 
+		struct Pixel {
+			u8 r, g, b, a;
+		};
+
 		struct {
 			m4f projection;
 		} v_ub;
@@ -244,6 +248,8 @@ namespace vkr {
 			v2f position;
 			v2f dimentions;
 			v4f color;
+
+			Rect rect;
 
 			/* Image must be part of the images array passed
 			 * into the constructor, so that the atlasing system
