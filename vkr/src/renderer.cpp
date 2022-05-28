@@ -698,7 +698,7 @@ namespace vkr {
 		};
 
 		pipeline = new Pipeline(video,
-			Pipeline::Flags::none,
+			Pipeline::Flags::blend,
 			shader,
 			sizeof(Vertex),
 			attribs, 4,

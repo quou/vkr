@@ -152,9 +152,9 @@ public:
 			.image = test_sprite
 		});
 		renderer2d->push(Renderer2D::Quad {
-			.position = { 100.0f, 50.0f },
+			.position = { 50.0f, 50.0f },
 			.dimentions = { 100.0f, 100.0 },
-			.color = { 1.0f, 1.0f, 1.0f, 1.0f },
+			.color = { 1.0f, 1.0f, 1.0f, 0.3f },
 			.rect = { 0, 0, 22, 46 },
 			.image = test_sprite2
 		});
