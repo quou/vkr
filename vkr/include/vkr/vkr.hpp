@@ -208,11 +208,13 @@ namespace vkr {
 		};
 
 		enum class Flags {
-			depth_test                   = 1 << 0,
-			cull_back_face               = 1 << 1,
-			cull_front_face              = 1 << 2,
-			front_face_clockwise         = 1 << 3,
-			front_face_counter_clockwise = 1 << 4,
+			none                         = 1 << 0,
+			depth_test                   = 1 << 1,
+			cull_back_face               = 1 << 2,
+			cull_front_face              = 1 << 3,
+			front_face_clockwise         = 1 << 4,
+			front_face_counter_clockwise = 1 << 5,
+			blend                        = 1 << 6,
 		} flags;
 
 		Pipeline(VideoContext* video, Flags flags, Shader* shader, usize stride,
@@ -221,6 +223,8 @@ namespace vkr {
 			DescriptorSet* desc_sets = null, usize desc_set_count = 0,
 			PushConstantRange* pcranges = null, usize pcrange_count = 0, bool is_recreating = false);
 		virtual ~Pipeline();
+
+		void clear();
 
 		void begin();
 		void end();
@@ -268,12 +272,15 @@ namespace vkr {
 	};
 
 	class VKR_API VertexBuffer : public Buffer {
+	private:
+		bool dynamic;
 	public:
-		VertexBuffer(VideoContext* video, void* verts, usize size);
+		VertexBuffer(VideoContext* video, void* verts, usize size, bool dynamic = false);
 		~VertexBuffer();
 
 		void bind();
 		void draw(usize count);
+		void update(void* verts, usize size, usize offset);
 	};
 
 	class VKR_API IndexBuffer : public Buffer {

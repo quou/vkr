@@ -11,10 +11,15 @@ private:
 	Model3D* monkey;
 	Model3D* cube;
 
+	Renderer2D* renderer2d;
+	Shader* sprite_shader;
+
 	f32 rot = 0.0f;
 	f64 time = 0.0f;
 
 	Renderer3D::ShaderConfig shaders;
+
+	Bitmap* test_sprite;
 
 	Texture* wall_a;
 	Texture* wall_n;
@@ -39,6 +44,13 @@ public:
 		shaders.shadowmap = Shader::from_file(video,
 			"res/shaders/shadowmap.vert.spv",
 			"res/shaders/shadowmap.frag.spv");
+		sprite_shader = Shader::from_file(video,
+			"res/shaders/2d.vert.spv",
+			"res/shaders/2d.frag.spv");
+
+		test_sprite = Bitmap::from_file("res/sprites/test.png");
+
+		renderer2d = new Renderer2D(video, sprite_shader, &test_sprite, 1, get_default_framebuffer());
 
 		auto monkey_obj = WavefrontModel::from_file("res/models/monkey.obj");
 		monkey = Model3D::from_wavefront(video, monkey_obj);
@@ -121,6 +133,27 @@ public:
 
 		renderer->draw(&world);
 
+		get_default_framebuffer()->begin();
+
+		renderer->draw_to_default_framebuffer();
+
+		renderer2d->begin(get_size());
+		renderer2d->push(Renderer2D::Quad {
+			.position = { 0.0f, 0.0f },
+			.dimentions = { 100.0f, 100.0 },
+			.color = { 1.0f, 1.0f, 1.0f, 1.0f },
+			.image = test_sprite
+		});
+		renderer2d->push(Renderer2D::Quad {
+			.position = { 50.0f, 50.0f },
+			.dimentions = { 100.0f, 100.0 },
+			.color = { 1.0f, 1.0f, 1.0f, 1.0f },
+			.image = test_sprite
+		});
+		renderer2d->end();
+
+		get_default_framebuffer()->end();
+
 		rot += 1.0f * (f32)ts;
 		time += ts;
 	}
@@ -135,6 +168,9 @@ public:
 		delete shaders.lit;
 		delete shaders.tonemap;
 		delete shaders.shadowmap;
+		delete renderer2d;
+		delete sprite_shader;
+		test_sprite->free();
 	}
 };
 

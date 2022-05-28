@@ -1,8 +1,9 @@
 #include <string.h> /* memcpy */
 
+#include <stb_image.h>
+
 #include "renderer.hpp"
 #include "vkr.hpp"
-
 
 static const vkr::u32 default_texture_data[2][2] = {
 	0xffff00ff, 0xff000000,
@@ -377,6 +378,7 @@ namespace vkr {
 
 		v_ub.sun_matrix = shadow_v_ub.projection * shadow_v_ub.view;
 
+		shadow_fb->begin();
 		shadow_pip->begin();
 
 		for (auto view = world->new_view<Transform, Renderable3D>(); view.valid(); view.next()) {
@@ -396,6 +398,7 @@ namespace vkr {
 		}
 
 		shadow_pip->end();
+		shadow_fb->end();
 
 		v_ub.projection = m4f::pers(70.0f, (f32)size.x / (f32)size.y, 0.1f, 100.0f);
 		v_ub.view = m4f::translate(m4f::identity(), camera_pos);
@@ -425,6 +428,7 @@ namespace vkr {
 		f_ub.sun.specular = sun.specular;
 
 		scene_pip->begin();
+		scene_fb->begin();
 
 		for (auto view = world->new_view<Transform, Renderable3D>(); view.valid(); view.next()) {
 			auto& trans = view.get<Transform>();
@@ -451,7 +455,10 @@ namespace vkr {
 		}
 
 		scene_pip->end();
+		scene_fb->end();
+	}
 
+	void Renderer3D::draw_to_default_framebuffer() {
 		tonemap->execute();
 	}
 
@@ -569,8 +576,134 @@ namespace vkr {
 	}
 
 	Model3D::~Model3D() {
-		for (auto mesh : meshes) {
+		for (auto& mesh : meshes) {
 			delete mesh;
 		}
+	}
+
+	Bitmap* Bitmap::from_file(const char* path) {
+		i32 w, h, channels;
+		void* data = stbi_load(path, &w, &h, &channels, 4);
+		if (!data) {
+			error("Failed to load `%s': %s.", path, stbi_failure_reason());
+			return null;
+		}
+
+		auto bitmap = new Bitmap;
+		bitmap->size = v2i(w, h);
+		bitmap->data = data;
+
+		return bitmap;
+	}
+
+	void Bitmap::free() {
+		stbi_image_free(data);
+		delete this;
+	}
+
+	Renderer2D::Renderer2D(VideoContext* video, Shader* shader, Bitmap** images, usize image_count, Framebuffer* framebuffer)
+		: video(video), framebuffer(framebuffer) {
+	
+		/* TODO: Pack the images onto a single texture. */
+		atlas = new Texture(video, images[0]->data, images[0]->size,
+			Texture::Flags::dimentions_2 | Texture::Flags::filter_none | Texture::Flags::format_rgba8);
+
+		vb = new VertexBuffer(video, null, max_quads * verts_per_quad * sizeof(Vertex), true);
+
+		Pipeline::Attribute attribs[] = {
+			{
+				.name = "position",
+				.location = 0,
+				.offset = offsetof(Vertex, position),
+				.type = Pipeline::Attribute::Type::float2
+			},
+			{
+				.name = "color",
+				.location = 1,
+				.offset = offsetof(Vertex, color),
+				.type = Pipeline::Attribute::Type::float4
+			},
+			{
+				.name = "uv",
+				.location = 2,
+				.offset = offsetof(Vertex, uv),
+				.type = Pipeline::Attribute::Type::float2
+			},
+			{
+				.name = "use_texture",
+				.location = 3,
+				.offset = offsetof(Vertex, use_texture),
+				.type = Pipeline::Attribute::Type::float1
+			}
+		};
+
+		Pipeline::Descriptor descs[2];
+		descs[0].name = "data";
+		descs[0].binding = 0;
+		descs[0].stage = Pipeline::Stage::vertex;
+		descs[0].resource.type = Pipeline::ResourcePointer::Type::uniform_buffer;
+		descs[0].resource.uniform.ptr = &v_ub;
+		descs[0].resource.uniform.size = sizeof(v_ub);
+
+		descs[1].name = "atlas";
+		descs[1].binding = 1;
+		descs[1].stage = Pipeline::Stage::fragment;
+		descs[1].resource.type = Pipeline::ResourcePointer::Type::texture;
+		descs[1].resource.texture.ptr = atlas;
+
+		Pipeline::DescriptorSet desc_set = {
+			.name = "uniforms",
+			.descriptors = descs,
+			.count = 2
+		};
+
+		pipeline = new Pipeline(video,
+			Pipeline::Flags::none,
+			shader,
+			sizeof(Vertex),
+			attribs, 4,
+			framebuffer,
+			&desc_set, 1);
+	}
+
+	Renderer2D::~Renderer2D() {
+		delete atlas;
+		delete pipeline;
+		delete vb;
+	}
+
+	void Renderer2D::push(const Quad& quad) {
+		auto x = quad.position.x;
+		auto y = quad.position.y;
+		auto w = quad.dimentions.x;
+		auto h = quad.dimentions.y;
+
+		f32 use_texture = quad.image ? 1.0f : 0.0f;
+
+		Vertex vertices[verts_per_quad] = {
+			{ { x,     y },     quad.color, { 0.0f, 0.0f }, use_texture },
+			{ { x + w, y + h }, quad.color, { 1.0f, 1.0f }, use_texture },
+			{ { x,     y + h }, quad.color, { 0.0f, 1.0f }, use_texture },
+			{ { x,     y },     quad.color, { 0.0f, 0.0f }, use_texture },
+			{ { x + w, y },     quad.color, { 1.0f, 0.0f }, use_texture },
+			{ { x + w, y + h }, quad.color, { 1.0f, 1.0f }, use_texture },
+		};
+
+		vb->update(vertices, sizeof(vertices), quad_count * verts_per_quad * sizeof(Vertex));
+
+		quad_count++;
+	}
+
+	void Renderer2D::begin(v2i screen_size) {
+		quad_count = 0;
+		v_ub.projection = m4f::orth(0.0f, (f32)screen_size.x, 0.0f, (f32)screen_size.y, -1.0f, 1.0f);
+	}
+
+	void Renderer2D::end() {
+		pipeline->begin();
+		pipeline->bind_descriptor_set(0, 0);
+		vb->bind();
+		vb->draw(quad_count * verts_per_quad);
+		pipeline->end();
 	}
 }

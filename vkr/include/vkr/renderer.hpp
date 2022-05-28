@@ -137,6 +137,7 @@ namespace vkr {
 		~Renderer3D();
 
 		void draw(ecs::World* world);
+		void draw_to_default_framebuffer();
 
 		struct Vertex {
 			v3f position;
@@ -187,5 +188,69 @@ namespace vkr {
 		v3f specular;
 		v3f diffuse;
 		f32 range;
+	};
+
+	struct Rect {
+		i32 x, y, w, h;
+	};
+
+	/* An RGBA CPU texture. */
+	struct Bitmap {
+		void* data;
+		v2i size;
+
+		static Bitmap* from_file(const char* path);
+		void free();
+	};
+
+	class Renderer2D {
+	public:
+	private:
+		struct Vertex {
+			v2f position;
+			v4f color;
+			v2f uv;
+			f32 use_texture;
+		};
+
+		struct {
+			m4f projection;
+		} v_ub;
+
+		VideoContext* video;
+		Framebuffer* framebuffer;
+
+		Pipeline* pipeline;
+		VertexBuffer* vb;
+
+		static constexpr usize max_quads = 500;
+		static constexpr usize verts_per_quad = 6;
+		usize quad_count;
+
+		Texture* atlas;
+		std::unordered_map<Bitmap*, Rect> sub_atlases;
+	public:
+		Renderer2D(VideoContext* video, Shader* shader, Bitmap** images, usize image_count, Framebuffer* framebuffer);
+		~Renderer2D();
+
+		/* If the quad count exceeds max_quads, begin/end will be
+		 * called to draw the current vertices to the screen and
+		 * the quad count reset, so don't rely on the explicit
+		 * calls to begin/end to be the only calls to such methods. */
+		void begin(v2i screen_size);
+		void end();
+
+		struct Quad {
+			v2f position;
+			v2f dimentions;
+			v4f color;
+
+			/* Image must be part of the images array passed
+			 * into the constructor, so that the atlasing system
+			 * can take care of it. */
+			Bitmap* image;
+		};
+
+		void push(const Quad& quad);
 	};
 }

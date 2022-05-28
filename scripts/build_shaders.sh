@@ -6,3 +6,4 @@ mkdir -p res/shaders
 ./shaders/compiler.lua shaders/src/lit.glsl shaders/obj/ res/shaders/
 ./shaders/compiler.lua shaders/src/shadowmap.glsl shaders/obj/ res/shaders/
 ./shaders/compiler.lua shaders/src/tonemap.glsl shaders/obj/ res/shaders/
+./shaders/compiler.lua shaders/src/2d.glsl shaders/obj/ res/shaders/

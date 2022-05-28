@@ -144,13 +144,13 @@ namespace vkr {
 
 		f32 x =  focal_length / asp;
 		f32 y = -focal_length;
-		f32 A = f / (n - f);
-		f32 B = n * A;
+		f32 a = f / (n - f);
+		f32 b = n * a;
 
 		r.m[0][0] = x;
 		r.m[1][1] = y;
-		r.m[2][2] = A;
-		r.m[3][2] = B;
+		r.m[2][2] = a;
+		r.m[3][2] = b;
 		r.m[2][3] = -1.0f;
 
 		return r;

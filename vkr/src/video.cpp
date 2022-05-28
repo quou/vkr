@@ -798,11 +798,16 @@ namespace vkr {
 			}
 		};
 
-		/* Create the default framebuffer. */
+		/* Create the default framebuffer.
+		 *
+		 * The default framebuffer does not have a depth attachment,
+		 * which means off-screen rendering needs to be used if 3-D
+		 * rendering is required. This is fine because most of the time
+		 * you want to do post-processing anyhow. */
 		default_fb = new Framebuffer(this,
 			Framebuffer::Flags::default_fb | Framebuffer::Flags::fit,
 			app.get_size(),
-			attachments, 2);
+			attachments, 1);
 	}
 
 	VideoContext::~VideoContext() {
@@ -1132,6 +1137,16 @@ namespace vkr {
 			VK_COLOR_COMPONENT_A_BIT;
 		color_blend_attachment.blendEnable = VK_FALSE;
 
+		if (flags & Flags::blend) {
+			color_blend_attachment.blendEnable = VK_TRUE;
+			color_blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+			color_blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+			color_blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+			color_blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+			color_blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+			color_blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+		}
+
 		VkPipelineColorBlendStateCreateInfo color_blending{};
 		color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 		color_blending.logicOpEnable = VK_FALSE;
@@ -1445,15 +1460,11 @@ namespace vkr {
 			vmaUnmapMemory(video->handle->allocator, u->memories[video->current_frame]);
 		}
 
-		framebuffer->begin();
-
 		vkCmdBindPipeline(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS, handle->pipeline);
 	}
 
 	void Pipeline::end() {
 		if (video->skip_frame) { return; }
-
-		framebuffer->end();
 	}
 
 	void Pipeline::push_constant(Stage stage, const void* ptr, usize size, usize offset) {
@@ -1844,6 +1855,8 @@ namespace vkr {
 	}
 
 	void Framebuffer::begin() {
+		if (video->skip_frame) { return; }
+
 		if (flags & Flags::headless) {
 			/* Transition the image layouts into layouts for writing to. */
 
@@ -1892,6 +1905,8 @@ namespace vkr {
 	}
 
 	void Framebuffer::end() {
+		if (video->skip_frame) { return; }
+
 		vkCmdEndRenderPass(video->handle->command_buffers[video->current_frame]);
 
 		if (flags & Flags::headless) {
@@ -1941,45 +1956,80 @@ namespace vkr {
 		delete handle;
 	}
 
-	VertexBuffer::VertexBuffer(VideoContext* video, void* verts, usize size) : Buffer(video) {
-		VkBuffer stage_buffer;
-		VmaAllocation stage_buffer_memory;
+	VertexBuffer::VertexBuffer(VideoContext* video, void* verts, usize size, bool dynamic) : Buffer(video), dynamic(dynamic) {
+		if (dynamic) {
+			for (usize i = 0; i < max_frames_in_flight; i++) {
+				new_buffer(video->handle, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+					VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT, handle->buffers + i, handle->memories + i);
 
-		new_buffer(video->handle, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			VMA_ALLOCATION_CREATE_MAPPED_BIT,
-			&stage_buffer, &stage_buffer_memory);
+				vmaMapMemory(video->handle->allocator, handle->memories[i], handle->datas + i);
+				if (verts) {
+					memcpy(handle->datas[i], verts, size);
+				}
+			}
+		} else {
+			VkBuffer stage_buffer;
+			VmaAllocation stage_buffer_memory;
 
-		void* data;
-		vmaMapMemory(video->handle->allocator, stage_buffer_memory, &data);
-		memcpy(data, verts, size);
-		vmaUnmapMemory(video->handle->allocator, stage_buffer_memory);
+			new_buffer(video->handle, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				VMA_ALLOCATION_CREATE_MAPPED_BIT,
+				&stage_buffer, &stage_buffer_memory);
 
-		new_buffer(video->handle, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-			0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &handle->buffer, &handle->memory);
-		copy_buffer(video->handle, handle->buffer, stage_buffer, size);
+			void* data;
+			vmaMapMemory(video->handle->allocator, stage_buffer_memory, &data);
+			memcpy(data, verts, size);
+			vmaUnmapMemory(video->handle->allocator, stage_buffer_memory);
 
-		vmaDestroyBuffer(video->handle->allocator, stage_buffer, stage_buffer_memory);
+			new_buffer(video->handle, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+				0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &handle->buffer, &handle->memory);
+			copy_buffer(video->handle, handle->buffer, stage_buffer, size);
+
+			vmaDestroyBuffer(video->handle->allocator, stage_buffer, stage_buffer_memory);
+		}
 	}
 
 	VertexBuffer::~VertexBuffer() {
 		video->wait_for_done();
 
-		vmaDestroyBuffer(video->handle->allocator, handle->buffer, handle->memory);
+		if (dynamic) {
+			for (usize i = 0; i < max_frames_in_flight; i++) {
+				vmaUnmapMemory(video->handle->allocator, handle->memories[i]);
+				vmaDestroyBuffer(video->handle->allocator, handle->buffers[i], handle->memories[i]);
+			}
+		} else {
+			vmaDestroyBuffer(video->handle->allocator, handle->buffer, handle->memory);
+		}
 	}
 
 	void VertexBuffer::bind() {
 		if (video->skip_frame) { return; }
 
-		VkBuffer vbs[] = { handle->buffer };
+		auto vb = handle->buffer;
+		if (dynamic) {
+			vb = handle->buffers[video->current_frame];
+		}
+
 		VkDeviceSize offsets[] = { 0 };
-		vkCmdBindVertexBuffers(video->handle->command_buffers[video->current_frame], 0, 1, vbs, offsets);
+		vkCmdBindVertexBuffers(video->handle->command_buffers[video->current_frame], 0, 1, &vb, offsets);
 	}
 
 	void VertexBuffer::draw(usize count) {
 		if (video->skip_frame) { return; }
 
 		vkCmdDraw(video->handle->command_buffers[video->current_frame], count, 1, 0, 0);
+	}
+
+	void VertexBuffer::update(void* verts, usize size, usize offset) {
+#ifdef DEBUG
+		if (!dynamic) {
+			warning("Attempt to update non-dynamic vertex buffer.");
+			return;
+		}
+#endif
+
+		memcpy(((u8*)handle->datas[video->current_frame]) + offset, verts, size);
 	}
 
 	IndexBuffer::IndexBuffer(VideoContext* video, u16* indices, usize count) : Buffer(video), count(count) {
@@ -2124,8 +2174,8 @@ namespace vkr {
 
 		VkSamplerCreateInfo sampler_info{};
 		sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-		sampler_info.magFilter = VK_FILTER_LINEAR;
-		sampler_info.minFilter = VK_FILTER_LINEAR;
+		sampler_info.magFilter = (flags & Flags::filter_linear) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+		sampler_info.minFilter = (flags & Flags::filter_linear) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
 		sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 		sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 		sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;

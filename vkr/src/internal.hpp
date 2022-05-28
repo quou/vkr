@@ -45,8 +45,12 @@ namespace vkr {
 
 	struct impl_Buffer {
 		VkBuffer buffer;
-
 		VmaAllocation memory;
+
+		/* For dynamic vertex buffers. */
+		VkBuffer buffers[max_frames_in_flight];
+		VmaAllocation memories[max_frames_in_flight];
+		void* datas[max_frames_in_flight];
 	};
 
 	struct impl_Texture {

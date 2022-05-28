@@ -18,7 +18,7 @@ for line in io.lines(arg[1]) do
 	if version_string == nil and #line > 0 and string.sub(line, 1, 8) == "#version" then
 		version_string = line
 	elseif version_string == nil then
-		print("error: First line must be #version.")
+		print(string.format("%s:1: error: First line must be #version.", arg[1]))
 		break
 	end
 
@@ -27,7 +27,7 @@ for line in io.lines(arg[1]) do
 			vertex = version_string .. "\n"
 		end
 
-		vertex = vertex .. "#line " .. tostring(line_number + 1) .. "\n"
+		vertex = vertex .. "#line " .. tostring(line_number + 1) .. " \"" .. arg[1] .. "\"\n"
 
 		adding_to = "vertex"
 		goto continue
@@ -38,7 +38,7 @@ for line in io.lines(arg[1]) do
 			fragment = version_string .. "\n"
 		end
 
-		fragment = fragment .. "#line " .. tostring(line_number + 1) .. "\n"
+		fragment = fragment .. "#line " .. tostring(line_number + 1) .. " \"" .. arg[1] .. "\"\n"
 
 		adding_to = "fragment"
 		goto continue
