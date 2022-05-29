@@ -195,26 +195,40 @@ namespace vkr {
 	};
 
 	/* An RGBA CPU texture. */
-	struct Bitmap {
+	struct VKR_API Bitmap {
 		void* data;
 		v2i size;
 
 		static Bitmap* from_file(const char* path);
+		static Bitmap* from_data(void* data, v2i size);
 		void free();
 	};
 
-	class Renderer2D {
+	struct impl_Font;
+
+	class VKR_API Font {
+	private:
+		impl_Font* handle;
+
+		void* get_glyph_set(u32 c);
+
+		friend class Renderer2D;
 	public:
+		Font(const char* path, f32 size);
+		~Font();
+	};
+
+	class VKR_API Renderer2D {
+	public:
+		struct Pixel {
+			u8 r, g, b, a;
+		};
 	private:
 		struct Vertex {
 			v2f position;
 			v4f color;
 			v2f uv;
 			f32 use_texture;
-		};
-
-		struct Pixel {
-			u8 r, g, b, a;
 		};
 
 		struct {
@@ -263,5 +277,6 @@ namespace vkr {
 		};
 
 		void push(const Quad& quad);
+		void push(Font* font, const char* text, v2f position, v4f color = v4f(1.0f, 1.0f, 1.0f, 1.0f));
 	};
 }

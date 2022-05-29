@@ -1,6 +1,7 @@
 #include <string.h> /* memcpy */
 
 #include <stb_image.h>
+#include <stb_truetype.h>
 #include <stb_rect_pack.h>
 
 #include "renderer.hpp"
@@ -597,9 +598,147 @@ namespace vkr {
 		return bitmap;
 	}
 
+	Bitmap* Bitmap::from_data(void* pixels, v2i size) {
+		auto bitmap = new Bitmap();
+
+		bitmap->data = pixels;
+		bitmap->size = size;
+
+		return bitmap;
+	}
+
 	void Bitmap::free() {
 		stbi_image_free(data);
 		delete this;
+	}
+
+	#define max_glyphset 256
+
+	struct GlyphSet;
+
+	struct impl_Font {
+		u8* data;
+		stbtt_fontinfo info;
+		GlyphSet* sets[max_glyphset];
+		f32 size;
+		f32 height;
+	};
+
+	struct GlyphSet {
+		Bitmap* atlas;
+		stbtt_bakedchar glyphs[256];
+
+		static GlyphSet* load(impl_Font* font, i32 idx) {
+			auto set = new GlyphSet();
+
+			v2i size(128, 128);
+
+			Renderer2D::Pixel* pixels;
+
+			/* Continually retries until all of the glyphs
+			 * fit inside the bitmap. */
+		retry:
+			pixels = new Renderer2D::Pixel[size.x * size.y];
+
+			f32 s = stbtt_ScaleForMappingEmToPixels(&font->info, 1) /
+				stbtt_ScaleForPixelHeight(&font->info, 1);
+			i32 r = stbtt_BakeFontBitmap(font->data, 0, font->size * s,
+				(u8*)pixels, size.x, size.y, idx * 256, 256, set->glyphs);
+
+			if (r <= 0) {
+				size.x *= 2;
+				size.y *= 2;
+				delete[] pixels;
+				goto retry;
+			}
+
+			i32 ascent, descent, linegap, scaled_ascent;
+			stbtt_GetFontVMetrics(&font->info, &ascent, &descent, &linegap);
+			f32 scale = stbtt_ScaleForMappingEmToPixels(&font->info, font->size);
+			scaled_ascent = (i32)(ascent * scale + 0.5);
+			for (usize i = 0; i < 256; i++) {
+				set->glyphs[i].yoff += scaled_ascent;
+				set->glyphs[i].xadvance = (f32)floor(set->glyphs[i].xadvance);
+			}
+
+			for (i32 i = size.x * size.y - 1; i >= 0; i--) {
+				u8 n = *((u8*)pixels + i);
+				pixels[i] = Renderer2D::Pixel { 255, 255, 255, n};
+			}
+
+			set->atlas = Bitmap::from_data(pixels, size);
+
+			return set;
+		}
+	};
+
+	/* This font renderer actually supports UTF-8! This function takes a
+ 	 * UTF-8 encoded string and gives the position in the glyph set of the
+ 	 * character. Note that the character is not guaranteed to exist, so
+ 	 * null text may be rendered, however the font defines that.
+ 	 *
+ 	 * This implementation is based on the man page for utf-8(7) */
+	static const char* utf8_to_codepoint(const char* p, u32* dst) {
+		u32 res, n;
+		switch (*p & 0xf0) {
+			case 0xf0 : res = *p & 0x07; n = 3; break;
+			case 0xe0 : res = *p & 0x0f; n = 2; break;
+			case 0xd0 :
+			case 0xc0 : res = *p & 0x1f; n = 1; break;
+			default   : res = *p;        n = 0; break;
+		}
+		while (n--) {
+			res = (res << 6) | (*(++p) & 0x3f);
+		}
+		*dst = res;
+		return p + 1;
+	}
+
+	Font::Font(const char* path, f32 size) {
+		handle = new impl_Font();
+
+		usize filesize;
+		if (!read_raw(path, &handle->data, &filesize)) {
+			return;
+		}
+
+		i32 r = stbtt_InitFont(&handle->info, handle->data, 0);
+		if (!r) {
+			abort_with("Failed to init font.");
+		}
+
+		handle->size = size;
+
+		i32 ascent, descent, linegap;
+		stbtt_GetFontVMetrics(&handle->info, &ascent, &descent, &linegap);
+		f32 scale = stbtt_ScaleForMappingEmToPixels(&handle->info, size);
+		handle->height = (i32)((ascent - descent + linegap) * scale + 0.5f);
+
+		stbtt_bakedchar* g = reinterpret_cast<GlyphSet*>(get_glyph_set('\n'))->glyphs;
+		g['\t'].x1 = g['\t'].x0;
+		g['\n'].x1 = g['\n'].x0;
+	}
+
+	void* Font::get_glyph_set(u32 c) {
+		i32 idx = (c >> 8) % max_glyphset;
+		if (!handle->sets[idx]) {
+			handle->sets[idx] = GlyphSet::load(handle, idx);
+		}
+		return handle->sets[idx];
+	}
+
+	Font::~Font() {
+		for (usize i = 0; i < max_glyphset; i++) {
+			auto set = handle->sets[i];
+			if (set) {
+				delete[] (Renderer2D::Pixel*)set->atlas->data;
+				delete set->atlas;
+				delete set;
+			}
+		}
+
+		delete[] handle->data;
+		delete handle;
 	}
 
 	Renderer2D::Renderer2D(VideoContext* video, Shader* shader, Bitmap** images, usize image_count, Framebuffer* framebuffer)
@@ -777,6 +916,42 @@ namespace vkr {
 		vb->update(vertices, sizeof(vertices), quad_count * verts_per_quad * sizeof(Vertex));
 
 		quad_count++;
+	}
+
+	void Renderer2D::push(Font* font, const char* text, v2f position, v4f color) {
+		f32 x = position.x;
+		f32 y = position.y;
+
+		f32 ori_x = x;
+
+		const char* p = text;
+		while (*p) {
+			if (*p == '\n') {
+				x = ori_x;
+				y += font->handle->height;
+				p++;
+				continue;
+			}
+
+			u32 codepoint;
+			p = utf8_to_codepoint(p, &codepoint);
+
+			auto set = reinterpret_cast<GlyphSet*>(font->get_glyph_set(codepoint));
+			auto g = &set->glyphs[codepoint & 0xff];
+
+			f32 w = (f32)(g->x1 - g->x0);
+			f32 h = (f32)(g->y1 - g->y0);
+
+			push(Quad {
+				.position = { x + g->xoff, y + g->yoff },
+				.dimentions = { w, h },
+				.color = color,
+				.rect = { g->x0, g->y0, (i32)w, (i32)h },
+				.image = set->atlas
+			});
+
+			x += g->xadvance;
+		}
 	}
 
 	void Renderer2D::begin(v2i screen_size) {

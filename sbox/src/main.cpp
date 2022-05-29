@@ -26,6 +26,8 @@ private:
 	Texture* wall_n;
 	Texture* wood_a;
 
+	Font* dejavusans;
+
 	ecs::World world;
 
 	ecs::Entity monkey1, monkey2;
@@ -48,6 +50,8 @@ public:
 		sprite_shader = Shader::from_file(video,
 			"res/shaders/2d.vert.spv",
 			"res/shaders/2d.frag.spv");
+
+		dejavusans = new Font("res/fonts/DejaVuSans.ttf", 25.0f);
 
 		test_sprite = Bitmap::from_file("res/sprites/test.png");
 		test_sprite2 = Bitmap::from_file("res/sprites/test2.png");
@@ -158,6 +162,7 @@ public:
 			.rect = { 0, 0, 22, 46 },
 			.image = test_sprite2
 		});
+		renderer2d->push(dejavusans, "Hello, world!", v2f(100.0f, 50.0f));
 		renderer2d->end();
 
 		get_default_framebuffer()->end();
@@ -178,6 +183,7 @@ public:
 		delete shaders.shadowmap;
 		delete renderer2d;
 		delete sprite_shader;
+		delete dejavusans;
 		test_sprite->free();
 		test_sprite2->free();
 	}
