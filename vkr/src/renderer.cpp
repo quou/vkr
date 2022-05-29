@@ -603,23 +603,42 @@ namespace vkr {
 	}
 
 	Renderer2D::Renderer2D(VideoContext* video, Shader* shader, Bitmap** images, usize image_count, Framebuffer* framebuffer)
-		: video(video), framebuffer(framebuffer) {
-	
+		: video(video), framebuffer(framebuffer), shader(shader) {
+
+		for (usize i = 0; i < image_count; i++) {
+			sub_atlases[images[i]] = Rect{};
+		}
+
+		/* Set up the pipline. */
+		vb = new VertexBuffer(video, null, max_quads * verts_per_quad * sizeof(Vertex), true);
+
+		create_atlas();
+
+		create_pipeline();
+	}
+
+	Renderer2D::~Renderer2D() {
+		delete atlas;
+		delete pipeline;
+		delete vb;
+	}
+
+	void Renderer2D::create_atlas() {	
 		/* Dumb rectangle packing algorithm. It just lines up all of the bitmaps
 		 * next to each other in a single texture. It's super wasteful and stupid but
 		 * I don't know if I can be bothered making a proper algorithm for it. */
-		v2i final_size;
-		for (usize i = 0; i < image_count; i++) {
-		   auto image = images[i];
+		v2i final_size(1, 1);
+		for (const auto& pair : sub_atlases) {
+		   auto image = pair.first;
 
 		   final_size.x += image->size.x;
 		   final_size.y = std::max(final_size.y, image->size.y);
 		}
 
 		Pixel* atlas_data = new Pixel[final_size.x * final_size.y];
-		v2i dst_pos;
-		for (usize i = 0; i < image_count; i++) {
-			auto image = images[i];
+		v2i dst_pos(1, 0);
+		for (auto& pair : sub_atlases) {
+			auto image = pair.first;
 
 			Pixel* src = ((Pixel*)image->data);
 			Pixel* dst = atlas_data + (dst_pos.x + dst_pos.y * final_size.x);
@@ -637,7 +656,7 @@ namespace vkr {
 				dst += dx;
 			}
 
-			sub_atlases[image] = Rect { dst_pos.x, dst_pos.y, image->size.x, image->size.y };
+			pair.second = Rect { dst_pos.x, dst_pos.y, image->size.x, image->size.y };
 
 			dst_pos.x += image->size.x;
 		}
@@ -646,10 +665,9 @@ namespace vkr {
 			Texture::Flags::dimentions_2 | Texture::Flags::filter_none | Texture::Flags::format_rgba8);
 
 		delete[] atlas_data;
+	}
 
-		/* Set up the pipline. */
-		vb = new VertexBuffer(video, null, max_quads * verts_per_quad * sizeof(Vertex), true);
-
+	void Renderer2D::create_pipeline() {
 		Pipeline::Attribute attribs[] = {
 			{
 				.name = "position",
@@ -706,12 +724,6 @@ namespace vkr {
 			&desc_set, 1);
 	}
 
-	Renderer2D::~Renderer2D() {
-		delete atlas;
-		delete pipeline;
-		delete vb;
-	}
-
 	void Renderer2D::push(const Quad& quad) {
 		auto x = quad.position.x;
 		auto y = quad.position.y;
@@ -721,6 +733,17 @@ namespace vkr {
 		Rect rect;
 
 		if (quad.image) {
+			if (sub_atlases.count(quad.image) == 0) {
+				/* Update the texture atlas. */
+				delete pipeline;
+				delete atlas;
+
+				sub_atlases[quad.image] = Rect{};
+
+				create_atlas();
+				create_pipeline();
+			}
+
 			Rect bitmap_rect = sub_atlases[quad.image];
 
 			rect.x = std::max(bitmap_rect.x, quad.rect.x);

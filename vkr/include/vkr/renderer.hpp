@@ -233,6 +233,11 @@ namespace vkr {
 
 		Texture* atlas;
 		std::unordered_map<Bitmap*, Rect> sub_atlases;
+
+		Shader* shader;
+
+		void create_atlas();
+		void create_pipeline();
 	public:
 		Renderer2D(VideoContext* video, Shader* shader, Bitmap** images, usize image_count, Framebuffer* framebuffer);
 		~Renderer2D();
@@ -251,9 +256,9 @@ namespace vkr {
 
 			Rect rect;
 
-			/* Image must be part of the images array passed
-			 * into the constructor, so that the atlasing system
-			 * can take care of it. */
+			/* For best performance, image should be part of the images
+			 * array passed into the constructor, so that the atlasing system
+			 * can take care of it before the rendering begins. */
 			Bitmap* image;
 		};
 
