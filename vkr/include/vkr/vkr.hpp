@@ -6,6 +6,7 @@
 #include "common.hpp"
 #include "maths.hpp"
 #include "renderer.hpp"
+#include "ui.hpp"
 #include "wavefront.hpp"
 
 namespace vkr {
@@ -215,6 +216,7 @@ namespace vkr {
 			front_face_clockwise         = 1 << 4,
 			front_face_counter_clockwise = 1 << 5,
 			blend                        = 1 << 6,
+			dynamic_scissor              = 1 << 7,
 		} flags;
 
 		Pipeline(VideoContext* video, Flags flags, Shader* shader, usize stride,
@@ -228,6 +230,8 @@ namespace vkr {
 
 		void begin();
 		void end();
+
+		void set_scissor(v4i rect);
 
 		void push_constant(Stage stage, const void* ptr, usize size, usize offset = 0);
 		void bind_descriptor_set(usize target, usize index);
@@ -387,8 +391,6 @@ namespace vkr {
 
 		const App& app;
 
-		bool skip_frame;
-
 		/* Stored to iterate over and re-create when the
 		 * window is resized. */
 		std::vector<Framebuffer*> framebuffers;
@@ -398,6 +400,8 @@ namespace vkr {
 	public:
 		impl_VideoContext* handle;
 		bool want_recreate;
+
+		bool skip_frame;
 
 		VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions);
 		~VideoContext();

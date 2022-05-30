@@ -250,6 +250,8 @@ namespace vkr {
 
 		Shader* shader;
 
+		v2i screen_size;
+
 		void create_atlas();
 		void create_pipeline();
 	public:
@@ -278,5 +280,7 @@ namespace vkr {
 
 		void push(const Quad& quad);
 		void push(Font* font, const char* text, v2f position, v4f color = v4f(1.0f, 1.0f, 1.0f, 1.0f));
+
+		void set_clip(Rect clip);
 	};
 }

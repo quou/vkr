@@ -1380,6 +1380,18 @@ namespace vkr {
 			abort_with("Failed to create pipeline layout.");
 		}
 
+		VkDynamicState dynamic_states[2];
+
+		u32 dynamic_state_count = 0;
+		if (flags & Flags::dynamic_scissor) {
+			dynamic_states[dynamic_state_count++] = VK_DYNAMIC_STATE_SCISSOR;
+		}
+
+		VkPipelineDynamicStateCreateInfo dynamic_state{};
+		dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+		dynamic_state.dynamicStateCount = dynamic_state_count;
+		dynamic_state.pDynamicStates = dynamic_states;
+
 		VkGraphicsPipelineCreateInfo pipeline_info{};
 		pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 		pipeline_info.stageCount = 2;
@@ -1391,7 +1403,7 @@ namespace vkr {
 		pipeline_info.pMultisampleState = &multisampling;
 		pipeline_info.pDepthStencilState = &depth_stencil;
 		pipeline_info.pColorBlendState = &color_blending;
-		pipeline_info.pDynamicState = null;
+		pipeline_info.pDynamicState = &dynamic_state;
 		pipeline_info.layout = handle->pipeline_layout;
 		pipeline_info.renderPass = framebuffer->handle->render_pass;
 		pipeline_info.subpass = 0;
@@ -1465,6 +1477,15 @@ namespace vkr {
 
 	void Pipeline::end() {
 		if (video->skip_frame) { return; }
+	}
+
+	void Pipeline::set_scissor(v4i rect) {
+		VkRect2D scissor = {
+			.offset = { .x     =      rect.x, .y      =      rect.y },
+			.extent = { .width = (u32)rect.z, .height = (u32)rect.w }
+		};
+
+		vkCmdSetScissor(video->handle->command_buffers[video->current_frame], 0, 1, &scissor);
 	}
 
 	void Pipeline::push_constant(Stage stage, const void* ptr, usize size, usize offset) {
@@ -1910,7 +1931,7 @@ namespace vkr {
 		vkCmdEndRenderPass(video->handle->command_buffers[video->current_frame]);
 
 		if (flags & Flags::headless) {
-			/* Transition the image layouts into layouts so that they might b
+			/* Transition the image layouts into layouts so that they might be
 			 * sampled from a shader. */
 
 			for (auto& pair : handle->attachment_map) {

@@ -142,7 +142,7 @@ namespace vkr {
 
 		shadow_fb = new Framebuffer(video,
 			Framebuffer::Flags::headless,
-			v2i(1024, 1024), &shadow_attachment, 1);
+			v2i(2048, 2048), &shadow_attachment, 1);
 
 		Pipeline::Attribute attribs[] = {
 			{
@@ -855,7 +855,7 @@ namespace vkr {
 		};
 
 		pipeline = new Pipeline(video,
-			Pipeline::Flags::blend,
+			Pipeline::Flags::blend | Pipeline::Flags::dynamic_scissor,
 			shader,
 			sizeof(Vertex),
 			attribs, 4,
@@ -881,6 +881,9 @@ namespace vkr {
 
 				create_atlas();
 				create_pipeline();
+
+				video->skip_frame = true;
+				return;
 			}
 
 			Rect bitmap_rect = sub_atlases[quad.image];
@@ -916,6 +919,11 @@ namespace vkr {
 		vb->update(vertices, sizeof(vertices), quad_count * verts_per_quad * sizeof(Vertex));
 
 		quad_count++;
+
+		if (quad_count >= max_quads) {
+			end();
+			begin(screen_size);
+		}
 	}
 
 	void Renderer2D::push(Font* font, const char* text, v2f position, v4f color) {
@@ -954,13 +962,22 @@ namespace vkr {
 		}
 	}
 
+	void Renderer2D::set_clip(Rect clip) {
+		pipeline->set_scissor(v4i(clip.x, clip.y, clip.w, clip.h));
+	}
+
 	void Renderer2D::begin(v2i screen_size) {
+		this->screen_size = screen_size;
+
+		set_clip(Rect { 0, 0, screen_size.x, screen_size.y });
+
 		quad_count = 0;
 		v_ub.projection = m4f::orth(0.0f, (f32)screen_size.x, 0.0f, (f32)screen_size.y, -1.0f, 1.0f);
+
+		pipeline->begin();
 	}
 
 	void Renderer2D::end() {
-		pipeline->begin();
 		pipeline->bind_descriptor_set(0, 0);
 		vb->bind();
 		vb->draw(quad_count * verts_per_quad);

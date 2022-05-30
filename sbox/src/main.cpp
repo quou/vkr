@@ -28,6 +28,8 @@ private:
 
 	Font* dejavusans;
 
+	UIContext* ui;
+
 	ecs::World world;
 
 	ecs::Entity monkey1, monkey2;
@@ -38,6 +40,8 @@ public:
 	SandboxApp() : App("Sandbox", vkr::v2i(800, 600)) {}
 
 	void on_init() override {
+		ui = new UIContext();
+
 		shaders.lit = Shader::from_file(video,
 			"res/shaders/lit.vert.spv",
 			"res/shaders/lit.frag.spv");
@@ -135,6 +139,15 @@ public:
 	}
 
 	void on_update(f64 ts) override {
+		ui->begin(get_size());
+		ui->use_font(dejavusans);
+
+		if (ui->begin_window("Test Window")) {
+			ui->label("Hello, I'm a label.");
+
+			ui->end();
+		}
+
 		auto& t = monkey2.get<Transform>();
 		t.m = m4f::rotate(m4f::identity(), rot, v3f(0.0f, 1.0f, 0.0f));
 
@@ -148,6 +161,7 @@ public:
 		renderer->draw_to_default_framebuffer();
 
 		renderer2d->begin(get_size());
+		renderer2d->set_clip(Rect { 30, 30, 100, 100 });
 		renderer2d->push(Renderer2D::Quad {
 			.position = { 0.0f, 0.0f },
 			.dimentions = { 100.0f, 100.0 },
@@ -163,6 +177,7 @@ public:
 			.image = test_sprite2
 		});
 		renderer2d->push(dejavusans, "Hello, world!", v2f(100.0f, 50.0f));
+		ui->draw(renderer2d);
 		renderer2d->end();
 
 		get_default_framebuffer()->end();
@@ -172,6 +187,7 @@ public:
 	}
 
 	void on_deinit() override {
+		delete ui;
 		delete renderer;
 		delete monkey;
 		delete cube;
