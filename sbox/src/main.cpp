@@ -169,6 +169,7 @@ public:
 			.rect = { 0, 0, 64, 64 },
 			.image = test_sprite
 		});
+		renderer2d->set_clip(Rect{ 0, 0, 400, 400 });
 		renderer2d->push(Renderer2D::Quad {
 			.position = { 50.0f, 50.0f },
 			.dimentions = { 100.0f, 100.0 },

@@ -254,6 +254,8 @@ namespace vkr {
 
 		void create_atlas();
 		void create_pipeline();
+
+		bool want_recreate;
 	public:
 		Renderer2D(VideoContext* video, Shader* shader, Bitmap** images, usize image_count, Framebuffer* framebuffer);
 		~Renderer2D();

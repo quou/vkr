@@ -368,7 +368,6 @@ namespace vkr {
 	class VKR_API VideoContext {
 	private:
 		bool validation_layers_supported();
-		void record_commands(u32 image);
 
 		u32 current_frame;
 		u32 image_id;
@@ -396,12 +395,12 @@ namespace vkr {
 		std::vector<Framebuffer*> framebuffers;
 		std::vector<Pipeline*> pipelines;
 
+		bool skip_frame;
+
 		bool validation_layers_enabled;
 	public:
 		impl_VideoContext* handle;
 		bool want_recreate;
-
-		bool skip_frame;
 
 		VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions);
 		~VideoContext();

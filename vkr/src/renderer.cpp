@@ -742,7 +742,7 @@ namespace vkr {
 	}
 
 	Renderer2D::Renderer2D(VideoContext* video, Shader* shader, Bitmap** images, usize image_count, Framebuffer* framebuffer)
-		: video(video), framebuffer(framebuffer), shader(shader) {
+		: video(video), framebuffer(framebuffer), shader(shader), want_recreate(false) {
 
 		for (usize i = 0; i < image_count; i++) {
 			sub_atlases[images[i]] = Rect{};
@@ -873,16 +873,8 @@ namespace vkr {
 
 		if (quad.image) {
 			if (sub_atlases.count(quad.image) == 0) {
-				/* Update the texture atlas. */
-				delete pipeline;
-				delete atlas;
-
 				sub_atlases[quad.image] = Rect{};
-
-				create_atlas();
-				create_pipeline();
-
-				video->skip_frame = true;
+				want_recreate = true;
 				return;
 			}
 
@@ -895,6 +887,8 @@ namespace vkr {
 		} else {
 			rect = quad.rect;
 		}
+
+		if (want_recreate) { return; }
 
 		f32 tx, ty, tw, th;
 
@@ -963,11 +957,24 @@ namespace vkr {
 	}
 
 	void Renderer2D::set_clip(Rect clip) {
+		if (want_recreate) { return; }
+
 		pipeline->set_scissor(v4i(clip.x, clip.y, clip.w, clip.h));
 	}
 
 	void Renderer2D::begin(v2i screen_size) {
 		this->screen_size = screen_size;
+
+		if (want_recreate) {
+			/* Update the texture atlas. */
+			delete pipeline;
+			delete atlas;
+
+			create_atlas();
+			create_pipeline();
+
+			want_recreate = false;
+		}
 
 		set_clip(Rect { 0, 0, screen_size.x, screen_size.y });
 
@@ -978,6 +985,8 @@ namespace vkr {
 	}
 
 	void Renderer2D::end() {
+		if (want_recreate) { return; }
+
 		pipeline->bind_descriptor_set(0, 0);
 		vb->bind();
 		vb->draw(quad_count * verts_per_quad);
