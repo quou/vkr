@@ -864,6 +864,10 @@ namespace vkr {
 	}
 
 	void Renderer2D::push(const Quad& quad) {
+		if (quad_count >= max_quads) {
+			warning("Too many quads.");
+		}
+
 		auto x = quad.position.x;
 		auto y = quad.position.y;
 		auto w = quad.dimentions.x;
@@ -910,14 +914,9 @@ namespace vkr {
 			{ { x + w, y + h }, quad.color, { tx + tw, ty + th }, use_texture },
 		};
 
-		vb->update(vertices, sizeof(vertices), quad_count * verts_per_quad * sizeof(Vertex));
+		vb->update(vertices, sizeof(vertices), (quad_offset + quad_count) * verts_per_quad * sizeof(Vertex));
 
 		quad_count++;
-
-		if (quad_count >= max_quads) {
-			end();
-			begin(screen_size);
-		}
 	}
 
 	void Renderer2D::push(Font* font, const char* text, v2f position, v4f color) {
@@ -959,6 +958,15 @@ namespace vkr {
 	void Renderer2D::set_clip(Rect clip) {
 		if (want_recreate) { return; }
 
+		if (quad_count > 0) {
+			pipeline->bind_descriptor_set(0, 0);
+			vb->bind();
+			vb->draw(quad_count * verts_per_quad, quad_offset * verts_per_quad);
+
+			quad_offset += quad_count;
+			quad_count = 0;
+		}
+
 		pipeline->set_scissor(v4i(clip.x, clip.y, clip.w, clip.h));
 	}
 
@@ -976,12 +984,12 @@ namespace vkr {
 			want_recreate = false;
 		}
 
-		set_clip(Rect { 0, 0, screen_size.x, screen_size.y });
-
 		quad_count = 0;
+		quad_offset = 0;
 		v_ub.projection = m4f::orth(0.0f, (f32)screen_size.x, 0.0f, (f32)screen_size.y, -1.0f, 1.0f);
 
 		pipeline->begin();
+		pipeline->set_scissor(v4i(0, 0, screen_size.x, screen_size.y));
 	}
 
 	void Renderer2D::end() {
@@ -989,7 +997,7 @@ namespace vkr {
 
 		pipeline->bind_descriptor_set(0, 0);
 		vb->bind();
-		vb->draw(quad_count * verts_per_quad);
+		vb->draw(quad_count * verts_per_quad, quad_offset * verts_per_quad);
 		pipeline->end();
 	}
 }

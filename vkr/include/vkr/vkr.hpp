@@ -283,7 +283,7 @@ namespace vkr {
 		~VertexBuffer();
 
 		void bind();
-		void draw(usize count);
+		void draw(usize count, usize offset = 0);
 		void update(void* verts, usize size, usize offset);
 	};
 

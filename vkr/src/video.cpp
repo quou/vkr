@@ -2036,10 +2036,10 @@ namespace vkr {
 		vkCmdBindVertexBuffers(video->handle->command_buffers[video->current_frame], 0, 1, &vb, offsets);
 	}
 
-	void VertexBuffer::draw(usize count) {
+	void VertexBuffer::draw(usize count, usize offset) {
 		if (video->skip_frame) { return; }
 
-		vkCmdDraw(video->handle->command_buffers[video->current_frame], count, 1, 0, 0);
+		vkCmdDraw(video->handle->command_buffers[video->current_frame], count, 1, offset, 0);
 	}
 
 	void VertexBuffer::update(void* verts, usize size, usize offset) {

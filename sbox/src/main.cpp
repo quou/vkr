@@ -161,7 +161,7 @@ public:
 		renderer->draw_to_default_framebuffer();
 
 		renderer2d->begin(get_size());
-		renderer2d->set_clip(Rect { 30, 30, 100, 100 });
+		renderer2d->set_clip(Rect { 0, 0, 80, 80 });
 		renderer2d->push(Renderer2D::Quad {
 			.position = { 0.0f, 0.0f },
 			.dimentions = { 100.0f, 100.0 },
