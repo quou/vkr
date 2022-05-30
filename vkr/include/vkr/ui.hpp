@@ -27,7 +27,8 @@ namespace vkr {
 			enum class Type : u8 {
 				draw_rect,
 				draw_text,
-				bind_font
+				bind_font,
+				set_clip
 			} type;
 
 			usize size;
@@ -48,9 +49,14 @@ namespace vkr {
 			v4f color;
 		};
 
+		struct SetClipCommand : public Command {
+			v2f position, dimentions;
+		};
+
 		void cmd_draw_rect(v2f position, v2f dimentions, v4f color);
 		void cmd_draw_text(const char* text, v2f position);
 		void cmd_bind_font(Font* font, v4f color);
+		void cmd_set_clip(v2f position, v2f dimentions);
 
 		/* Fixed-size command buffer; allows one megabyte of commands.
 		 *
@@ -67,6 +73,7 @@ namespace vkr {
 
 		struct {
 			v2f position;
+			v2f dimentions;
 			v2f content_offset;
 			v2f max_content_dimentions;
 			v2f content_dimentions;

@@ -145,6 +145,7 @@ public:
 		if (ui->begin_window("Test Window")) {
 			ui->label("Hello, I'm a label.");
 			ui->label("I'm another label.");
+			ui->label("I'm a label that's going to be clipped off.");
 
 			ui->end();
 		}

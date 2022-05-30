@@ -39,6 +39,16 @@ namespace vkr {
 		command_buffer_idx += cmd->size;
 	}
 
+	void UIContext::cmd_set_clip(v2f position, v2f dimentions) {
+		SetClipCommand* cmd = reinterpret_cast<SetClipCommand*>(command_buffer + command_buffer_idx);
+		cmd->type = Command::Type::set_clip;
+		cmd->size = sizeof(*cmd);
+		cmd->position = position;
+		cmd->dimentions = dimentions;
+
+		command_buffer_idx += cmd->size;
+	}
+
 	UIContext::UIContext() {
 		set_style_var(StyleVar::padding, 3.0f);
 
@@ -85,6 +95,14 @@ namespace vkr {
 
 					renderer->push(bound_font, draw_text_cmd->text, draw_text_cmd->position, bound_font_color);
 				} break;
+				case Command::Type::set_clip: {
+					auto set_clip_cmd = static_cast<SetClipCommand*>(cmd);
+
+					renderer->set_clip(Rect {
+						(i32)set_clip_cmd->position.x,   (i32)set_clip_cmd->position.y,
+						(i32)set_clip_cmd->dimentions.x, (i32)set_clip_cmd->dimentions.y,
+					});
+				} break;
 				default: break;
 			}
 
@@ -98,14 +116,16 @@ namespace vkr {
 		auto padding = get_style_var(StyleVar::padding);
 
 		window.position = default_position;
+		window.dimentions = default_size;
 		window.content_offset = v2f(padding, text_dimentions.y + padding);
 		window.max_content_dimentions = default_size - v2f(padding);
 		window.content_dimentions = v2f();
 
 		cursor_pos = window.position + window.content_offset;
 
+		cmd_draw_rect(window.position - v2f(1.0f), default_size + v2f(2.0f), get_style_color(StyleColor::border));
 		cmd_draw_rect(window.position, default_size, get_style_color(StyleColor::background));
-		cmd_draw_rect(window.position - v2f(1.0f), default_size + v2f(2.0f), get_style_color(StyleColor::background));
+		cmd_set_clip(window.position + v2f(padding), window.dimentions - v2f(padding) * 2.0f);
 		cmd_draw_text(title,
 			v2f(window.position.x + window.content_offset.x + (window.max_content_dimentions.x / 2.0f) - (text_dimentions.x / 2.0f),
 			default_position.y + padding));
