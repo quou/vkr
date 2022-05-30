@@ -55,7 +55,7 @@ public:
 			"res/shaders/2d.vert.spv",
 			"res/shaders/2d.frag.spv");
 
-		dejavusans = new Font("res/fonts/DejaVuSans.ttf", 25.0f);
+		dejavusans = new Font("res/fonts/DejaVuSans.ttf", 14.0f);
 
 		test_sprite = Bitmap::from_file("res/sprites/test.png");
 		test_sprite2 = Bitmap::from_file("res/sprites/test2.png");
@@ -144,6 +144,7 @@ public:
 
 		if (ui->begin_window("Test Window")) {
 			ui->label("Hello, I'm a label.");
+			ui->label("I'm another label.");
 
 			ui->end();
 		}

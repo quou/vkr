@@ -1480,6 +1480,8 @@ namespace vkr {
 	}
 
 	void Pipeline::set_scissor(v4i rect) {
+		if (video->skip_frame) { return; }
+
 		VkRect2D scissor = {
 			.offset = { .x     =      rect.x, .y      =      rect.y },
 			.extent = { .width = (u32)rect.z, .height = (u32)rect.w }

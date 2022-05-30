@@ -727,6 +727,38 @@ namespace vkr {
 		return handle->sets[idx];
 	}
 
+	v2f Font::dimentions(const char* text) {
+		f32 x = 0.0f;
+		f32 width = 0.0f;
+		f32 y = handle->height;
+
+		const char* p = text;
+		while (*p) {
+			if (*p == '\n') {
+				width = std::max(width, x);
+				x = 0;
+				y += handle->height;
+				p++;
+				continue;
+			}
+
+			u32 codepoint;
+			p = utf8_to_codepoint(p, &codepoint);
+
+			auto set = reinterpret_cast<GlyphSet*>(get_glyph_set(codepoint));
+			auto g = &set->glyphs[codepoint & 0xff];
+
+			f32 w = (f32)(g->x1 - g->x0);
+			f32 h = (f32)(g->y1 - g->y0);
+
+			x += g->xadvance;
+		}
+
+		width = std::max(width, x);
+
+		return v2f(width, y);
+	}
+
 	Font::~Font() {
 		for (usize i = 0; i < max_glyphset; i++) {
 			auto set = handle->sets[i];
