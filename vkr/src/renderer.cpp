@@ -1,4 +1,5 @@
 #include <string.h> /* memcpy */
+#include <math.h>
 
 #include <stb_image.h>
 #include <stb_truetype.h>
@@ -900,10 +901,10 @@ namespace vkr {
 			warning("Too many quads.");
 		}
 
-		auto x = quad.position.x;
-		auto y = quad.position.y;
-		auto w = quad.dimentions.x;
-		auto h = quad.dimentions.y;
+		auto x = roundf(quad.position.x);
+		auto y = roundf(quad.position.y);
+		auto w = roundf(quad.dimentions.x);
+		auto h = roundf(quad.dimentions.y);
 
 		Rect rect;
 

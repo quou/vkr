@@ -55,7 +55,7 @@ namespace vkr {
 		command_buffer_idx += cmd->size;
 	}
 
-	UIContext::UIContext(App* app) : app(app) {
+	UIContext::UIContext(App* app) : app(app), dragging(0), anything_hovered(false), anything_hot(false) {
 		set_style_var(StyleVar::padding, 3.0f);
 
 		set_style_color(StyleColor::background,  make_color(0x1a1a1a, 150));
@@ -72,6 +72,8 @@ namespace vkr {
 	void UIContext::begin(v2i screen_size) {
 		this->screen_size = screen_size;
 		command_buffer_idx = 0;
+		current_item_height = 0.0f;
+		item = 0;
 	}
 
 	void UIContext::end() {

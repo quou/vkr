@@ -845,6 +845,8 @@ namespace vkr {
 	}
 
 	void VideoContext::init_swapchain() {
+		wait_for_done();
+
 		auto qfs = get_queue_families(handle->pdevice, handle);
 
 		/* Create the swap chain. */
@@ -1430,6 +1432,9 @@ namespace vkr {
 			delete[] descriptor_sets;
 
 			delete[] pcranges;
+
+			video->pipelines.erase(std::remove(video->pipelines.begin(), video->pipelines.end(), this),
+				video->pipelines.end());
 		}
 
 		for (usize i = 0; i < uniform_count; i++) {
@@ -1523,7 +1528,6 @@ namespace vkr {
 	void Pipeline::recreate() {
 		is_recreating = true;
 
-		/* The C++ Gods hate me. The C# Gods hate me even more. */
 		this->~Pipeline();
 		new(this) Pipeline(video, flags, shader, stride,
 			attribs, attrib_count, framebuffer, descriptor_sets, descriptor_set_count,
@@ -1602,6 +1606,11 @@ namespace vkr {
 		if (flags & Flags::default_fb) {
 			/* Only one colour attachment is supported on the default framebuffer. */
 			color_attachment_count = 1;
+
+			/* Ensure the framebuffer isn't created larger than the swapchain
+			 * images, as that goes against the Vulkan spec. */
+			size.x = video->handle->swapchain_extent.width;
+			size.y = video->handle->swapchain_extent.height;
 		} else {
 			/* Map the actual indices to attachments. */
 			handle->colors = new impl_Attachment[color_attachment_count];
@@ -1830,6 +1839,9 @@ namespace vkr {
 
 		if (!is_recreating) {
 			delete[] attachments;
+
+			video->framebuffers.erase(std::remove(video->framebuffers.begin(), video->framebuffers.end(), this),
+				video->framebuffers.end());
 		}
 
 		if (flags & Flags::default_fb) {
