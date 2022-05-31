@@ -1,5 +1,7 @@
 #pragma once
 
+#include <map>
+
 #include "common.hpp"
 #include "maths.hpp"
 #include "renderer.hpp"
@@ -16,6 +18,9 @@ namespace vkr {
 
 		enum class StyleColor : u32 {
 			background = 0,
+			background2,
+			hovered,
+			hot,
 			border,
 			count
 		};
@@ -54,7 +59,7 @@ namespace vkr {
 		};
 
 		void cmd_draw_rect(v2f position, v2f dimentions, v4f color);
-		void cmd_draw_text(const char* text, v2f position);
+		void cmd_draw_text(const char* text, usize len, v2f position);
 		void cmd_bind_font(Font* font, v4f color);
 		void cmd_set_clip(v2f position, v2f dimentions);
 
@@ -71,18 +76,22 @@ namespace vkr {
 		f32 style_vars[static_cast<u32>(StyleVar::count)];
 		v4f style_colors[static_cast<u32>(StyleColor::count)];
 
-		struct {
+		struct WindowMeta {
 			v2f position;
 			v2f dimentions;
 			v2f content_offset;
 			v2f max_content_dimentions;
 			v2f content_dimentions;
-		} window;
+		}* window;
+
+		std::unordered_map<u64, WindowMeta> meta;
 
 		Font* bound_font;
 		v4f bound_font_color;
+
+		App* app;
 	public:
-		UIContext();
+		UIContext(App* app);
 		~UIContext();
 
 		void begin(v2i screen_size);
@@ -95,6 +104,8 @@ namespace vkr {
 		void use_font(Font* font, v4f color = v4f(1.0f, 1.0f, 1.0f, 1.0f));
 
 		void label(const char* text);
+		void text(const char* fmt, ...);
+		bool button(const char* text);
 
 		inline void set_style_var(StyleVar v, f32 value) {
 			if (v >= StyleVar::count) { return; }
@@ -119,5 +130,7 @@ namespace vkr {
 
 			return style_colors[static_cast<u32>(v)];
 		}
+
+		bool rect_hovered(v2f position, v2f dimentions);
 	};
 }

@@ -25,6 +25,9 @@ namespace vkr {
 	VKR_API bool write_raw(const char* path, u8* buffer, usize* size);
 	VKR_API bool write_raw_text(const char* path, char* buffer);
 
+	VKR_API u64 elf_hash(const u8* data, usize size);
+	VKR_API u64 hash_string(const char* str);
+
 	/* These structures are for storing information about the
 	 * state of a class wrapper that might rely on external headers,
 	 * namely glfw3.h and vulkan.h. */
@@ -37,11 +40,104 @@ namespace vkr {
 	struct impl_Texture;
 	struct impl_VideoContext;
 
+	enum Key {
+		key_unknown = 0,
+		key_space,
+		key_apostrophe,
+		key_comma,
+		key_minus,
+		key_period,
+		key_slash,
+		key_0,
+		key_1,
+		key_2,
+		key_3,
+		key_4,
+		key_5,
+		key_6,
+		key_7,
+		key_8,
+		key_9,
+		key_semicolon,
+		key_equal,
+		key_A,
+		key_B,
+		key_C,
+		key_D,
+		key_E,
+		key_F,
+		key_G,
+		key_H,
+		key_I,
+		key_J,
+		key_K,
+		key_L,
+		key_M,
+		key_N,
+		key_O,
+		key_P,
+		key_Q,
+		key_R,
+		key_S,
+		key_T,
+		key_U,
+		key_V,
+		key_W,
+		key_X,
+		key_Y,
+		key_Z,
+		key_backslash,
+		key_grave_accent,
+		key_escape,
+		key_return,
+		key_tab,
+		key_backspace,
+		key_insert,
+		key_delete,
+		key_right,
+		key_left,
+		key_down,
+		key_up,
+		key_page_up,
+		key_page_down,
+		key_home,
+		key_end,
+		key_f1,
+		key_f2,
+		key_f3,
+		key_f4,
+		key_f5,
+		key_f6,
+		key_f7,
+		key_f8,
+		key_f9,
+		key_f10,
+		key_f11,
+		key_f12,
+		key_shift,
+		key_control,
+		key_alt,
+		key_super,
+		key_menu,
+		key_count
+	};
+
+	enum MouseButton {
+		mouse_button_unknown = 0,
+		mouse_button_left,
+		mouse_button_middle,
+		mouse_button_right,
+		mouse_button_count
+	};
+
 	/* To be inherited by client applications to provide custom
 	 * functionality and data. */
 	class VKR_API App {
 	private:
 		impl_App* handle;
+
+		std::unordered_map<i32, Key>         keymap;
+		std::unordered_map<i32, MouseButton> mousemap;
 
 		const char* title;
 
@@ -49,7 +145,7 @@ namespace vkr {
 
 		friend class VideoContext;
 	public:
-		v2i size;
+		v2i size, mouse_pos;
 		VideoContext* video;
 
 		App(const char* title, v2i size);
@@ -64,6 +160,25 @@ namespace vkr {
 
 		v2i get_size() const;
 		Framebuffer* get_default_framebuffer() const;
+
+		bool held_keys    [static_cast<i32>(key_count)];
+		bool pressed_keys [static_cast<i32>(key_count)];
+		bool released_keys[static_cast<i32>(key_count)];
+
+		bool held_mouse_buttons    [static_cast<i32>(mouse_button_count)];
+		bool pressed_mouse_buttons [static_cast<i32>(mouse_button_count)];
+		bool released_mouse_buttons[static_cast<i32>(mouse_button_count)];
+
+		inline Key key_from_key(i32 c)       { return keymap.count(c) != 0 ? keymap[c] : key_unknown; }
+		inline MouseButton mb_from_mb(i32 c) { return mousemap.count(c) != 0 ? mousemap[c] : mouse_button_unknown; }
+
+		inline bool key_pressed      (Key key) const { return held_keys    [static_cast<i32>(key)]; }
+		inline bool key_just_pressed (Key key) const { return pressed_keys [static_cast<i32>(key)]; }
+		inline bool key_just_released(Key key) const { return released_keys[static_cast<i32>(key)]; }
+
+		inline bool mouse_button_pressed      (MouseButton mb) const { return held_mouse_buttons    [static_cast<i32>(mb)]; }
+		inline bool mouse_button_just_pressed (MouseButton mb) const { return pressed_mouse_buttons [static_cast<i32>(mb)]; }
+		inline bool mouse_button_just_released(MouseButton mb) const { return released_mouse_buttons[static_cast<i32>(mb)]; }
 	};
 
 	class VKR_API Framebuffer {

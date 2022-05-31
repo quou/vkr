@@ -23,6 +23,14 @@ namespace vkr {
 		v2(T xy) : x(xy), y(xy) {}
 		v2(T x, T y) : x(x), y(y) {}
 
+		bool operator>(const v2<T>& other) const {
+			return x > other.x && y > other.y;
+		}
+
+		bool operator<(const v2<T>& other) const {
+			return x < other.x && y < other.y;
+		}
+
 		v2<T> operator+(const v2<T>& other) const {
 			return v2<T>(x + other.x, y + other.y);
 		}
@@ -155,6 +163,14 @@ namespace vkr {
 		v3(v2<T> xy, T z) : x(xy.x), y(xy.y), z(z) {}
 		v3(T x, v2<T> yz) : x(x), y(yz.x), z(yz.y) {}
 		v3(T x, T y, T z) : x(x), y(y), z(z) {}
+
+		bool operator>(const v3<T>& other) const {
+			return x > other.x && y > other.y && z > other.z;
+		}
+
+		bool operator<(const v3<T>& other) const {
+			return x < other.x && y < other.y && z < other.z;
+		}
 
 		v3<T> operator+(const v3<T>& other) const {
 			return v3<T>(x + other.x, y + other.y, z + other.z);
@@ -293,6 +309,14 @@ namespace vkr {
 		v4(v3<T> xyz, T w) : x(xyz.x), y(xyz.y), z(xyz.z), w(w) {}
 		v4(T x, v3<T> yzw) : x(x), y(yzw.x), z(yzw.y), w(yzw.z) {}
 		v4(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) {}
+
+		bool operator>(const v4<T>& other) const {
+			return x > other.x && y > other.y && z > other.z && w > other.w;
+		}
+
+		bool operator<(const v4<T>& other) const {
+			return x < other.x && y < other.y && z < other.z && w < other.w;
+		}
 
 		v4<T> operator+(const v4<T>& other) const {
 			return v4<T>(x + other.x, y + other.y, z + other.z, w + other.w);
@@ -469,4 +493,12 @@ namespace vkr {
 		m4f inverse();
 		m4f transposed();
 	};
+
+	inline static v4f make_color(u32 rgb, u8 a) {	
+		return v4f(
+			(f32)((rgb >> 16) & 0xff) / 255.0f,
+			(f32)((rgb >> 8)  & 0xff) / 255.0f,
+			(f32)((rgb)       & 0xff) / 255.0f,
+			(f32)a                    / 255.0f);
+	}
 }

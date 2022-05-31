@@ -663,7 +663,7 @@ namespace vkr {
 
 			for (i32 i = size.x * size.y - 1; i >= 0; i--) {
 				u8 n = *((u8*)pixels + i);
-				pixels[i] = Renderer2D::Pixel { 255, 255, 255, n};
+				pixels[i] = Renderer2D::Pixel { 255, 255, 255, n };
 			}
 
 			set->atlas = Bitmap::from_data(pixels, size);
@@ -674,10 +674,10 @@ namespace vkr {
 
 	/* This font renderer actually supports UTF-8! This function takes a
  	 * UTF-8 encoded string and gives the position in the glyph set of the
- 	 * character. Note that the character is not guaranteed to exist, so
- 	 * null text may be rendered, however the font defines that.
+ 	 * character. Note that the character is not guaranteed to exist in
+ 	 * the font, so null text may be rendered, however the font defines that.
  	 *
- 	 * This implementation is based on the man page for utf-8(7) */
+ 	 * This implementation is based on section seven of the man page for utf-8 */
 	static const char* utf8_to_codepoint(const char* p, u32* dst) {
 		u32 res, n;
 		switch (*p & 0xf0) {

@@ -37,10 +37,10 @@ private:
 
 	ecs::Entity red_light, blue_light;
 public:
-	SandboxApp() : App("Sandbox", vkr::v2i(800, 600)) {}
+	SandboxApp() : App("Sandbox", vkr::v2i(1920, 1080)) {}
 
 	void on_init() override {
-		ui = new UIContext();
+		ui = new UIContext(this);
 
 		shaders.lit = Shader::from_file(video,
 			"res/shaders/lit.vert.spv",
@@ -143,8 +143,18 @@ public:
 		ui->use_font(dejavusans);
 
 		if (ui->begin_window("Test Window")) {
+			ui->text("FPS: %g", 1.0 / ts);
 			ui->label("Hello, I'm a label.");
 			ui->label("I'm another label.");
+
+			if (ui->button("Button")) {
+				info("Button pressed.");
+			}
+
+			if (ui->button("Another Button")) {
+				info("Another button pressed.");
+			}
+
 			ui->label("I'm a label that's going to be clipped off.");
 
 			ui->end();
@@ -163,23 +173,6 @@ public:
 		renderer->draw_to_default_framebuffer();
 
 		renderer2d->begin(get_size());
-		renderer2d->set_clip(Rect { 0, 0, 80, 80 });
-		renderer2d->push(Renderer2D::Quad {
-			.position = { 0.0f, 0.0f },
-			.dimentions = { 100.0f, 100.0 },
-			.color = { 1.0f, 1.0f, 1.0f, 1.0f },
-			.rect = { 0, 0, 64, 64 },
-			.image = test_sprite
-		});
-		renderer2d->set_clip(Rect{ 0, 0, 400, 400 });
-		renderer2d->push(Renderer2D::Quad {
-			.position = { 50.0f, 50.0f },
-			.dimentions = { 100.0f, 100.0 },
-			.color = { 1.0f, 1.0f, 1.0f, 0.3f },
-			.rect = { 0, 0, 22, 46 },
-			.image = test_sprite2
-		});
-		renderer2d->push(dejavusans, "Hello, world!", v2f(100.0f, 50.0f));
 		ui->draw(renderer2d);
 		renderer2d->end();
 

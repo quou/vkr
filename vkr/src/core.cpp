@@ -1,6 +1,7 @@
-#include <stdio.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "vkr.hpp"
 
@@ -104,5 +105,23 @@ namespace vkr {
 
 	bool write_raw_text(const char* path, char* buffer) {
 		return false;
+	}
+
+	u64 elf_hash(const u8* data, usize size) {
+		u64 hash = 0, x = 0;
+
+		for (u32 i = 0; i < size; i++) {
+			hash = (hash << 4) + data[i];
+			if ((x = hash & 0xF000000000LL) != 0) {
+				hash ^= (x >> 24);
+				hash &= ~x;
+			}
+		}
+
+		return (hash & 0x7FFFFFFFFF);
+	}
+
+	u64 hash_string(const char* str) {
+		return elf_hash(reinterpret_cast<const u8*>(str), strlen(str));
 	}
 }
