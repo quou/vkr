@@ -828,7 +828,7 @@ namespace vkr {
 				dst += dx;
 			}
 
-			pair.second = Rect { dst_pos.x, dst_pos.y, image->size.x, image->size.y };
+			sub_atlases[pair.first] = Rect { dst_pos.x, dst_pos.y, image->size.x, image->size.y };
 
 			dst_pos.x += image->size.x;
 		}
@@ -917,8 +917,8 @@ namespace vkr {
 
 			Rect bitmap_rect = sub_atlases[quad.image];
 
-			rect.x = std::max(bitmap_rect.x, quad.rect.x);
-			rect.y = std::max(bitmap_rect.y, quad.rect.y);
+			rect.x = bitmap_rect.x + quad.rect.x;
+			rect.y = bitmap_rect.y + quad.rect.y;
 			rect.w = std::min(bitmap_rect.w, quad.rect.w);
 			rect.h = std::min(bitmap_rect.h, quad.rect.h);
 		} else {
