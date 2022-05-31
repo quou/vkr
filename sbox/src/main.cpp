@@ -155,6 +155,12 @@ public:
 				info("Another button pressed.");
 			}
 
+			ui->columns(2, ui->max_column_width() / 2.0f);
+			ui->label("Label");
+			ui->button("Button");
+			ui->label("Label");
+			ui->button("Button");
+
 			ui->label("I'm a label that's going to be clipped off.");
 
 			ui->end();

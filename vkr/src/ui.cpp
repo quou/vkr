@@ -154,6 +154,8 @@ namespace vkr {
 			}
 		}
 
+		columns(1, max_column_width());
+
 		cmd_draw_rect(window->position - v2f(1.0f), window->dimentions + v2f(2.0f), get_style_color(StyleColor::border));
 		cmd_draw_rect(window->position, window->dimentions, get_style_color(StyleColor::background));
 		cmd_set_clip(window->position + v2f(padding), window->dimentions - v2f(padding) * 2.0f);
@@ -165,7 +167,7 @@ namespace vkr {
 	}
 
 	void UIContext::end_window() {
-		
+		window = null;
 	}
 
 	void UIContext::use_font(Font* font, v4f color) {
@@ -179,7 +181,7 @@ namespace vkr {
 
 		cmd_draw_text(text, strlen(text), cursor_pos);
 
-		cursor_pos.y += dim.y;
+		advance(dim.y);
 	}
 
 	void UIContext::text(const char* fmt, ...) {
@@ -194,7 +196,7 @@ namespace vkr {
 
 		cmd_draw_text(str, len, cursor_pos);
 
-		cursor_pos.y += dim.y;
+		advance(dim.y);
 	}
 
 	bool UIContext::button(const char* text) {
@@ -222,8 +224,34 @@ namespace vkr {
 		cmd_draw_rect(position, dimentions, color);
 		cmd_draw_text(text, strlen(text), position + padding);
 
-		cursor_pos.y += text_dim.y + padding * 3.0f;
+		advance(text_dim.y + padding * 3.0f);
 
 		return hovered && app->mouse_button_just_released(mouse_button_left);
+	}
+
+	void UIContext::columns(usize count, f32 size) {
+		column_count = count;
+		column_size = size;
+	}
+
+	f32 UIContext::max_column_width() {
+		return window->max_content_dimentions.x;
+	}
+
+	void UIContext::advance(f32 last_height) {
+		item++;
+
+		if (last_height > current_item_height) {
+			current_item_height = last_height;
+		}
+
+		if (item >= column_count) {
+			cursor_pos.x = window->position.x + window->content_offset.x;
+			cursor_pos.y += current_item_height;
+			current_item_height = 0;
+			item = 0;
+		} else {
+			cursor_pos.x += column_size;
+		}
 	}
 }

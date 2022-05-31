@@ -95,6 +95,12 @@ namespace vkr {
 		u64 dragging;
 		v2f drag_offset;
 
+		usize column_count;
+		f32 column_size;
+
+		usize item;
+		f32 current_item_height;
+
 		App* app;
 	public:
 		UIContext(App* app);
@@ -112,6 +118,15 @@ namespace vkr {
 		void label(const char* text);
 		void text(const char* fmt, ...);
 		bool button(const char* text);
+
+		void columns(usize count, f32 size);
+		f32 max_column_width();
+
+		/* Advances the cursor position to the correct
+		 * place to draw the next element. `last_height'
+		 * describes the height of the last element
+		 * drawn before the call to `advance'. */
+		void advance(f32 last_height);
 
 		inline void set_style_var(StyleVar v, f32 value) {
 			if (v >= StyleVar::count) { return; }
