@@ -89,6 +89,12 @@ namespace vkr {
 		Font* bound_font;
 		v4f bound_font_color;
 
+		bool anything_hovered;
+		bool anything_hot;
+
+		u64 dragging;
+		v2f drag_offset;
+
 		App* app;
 	public:
 		UIContext(App* app);

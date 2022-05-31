@@ -75,7 +75,8 @@ namespace vkr {
 	}
 
 	void UIContext::end() {
-
+		anything_hovered = false;
+		anything_hot = false;
 	}
 
 	void UIContext::draw(Renderer2D* renderer) {
@@ -121,13 +122,13 @@ namespace vkr {
 
 	bool UIContext::begin_window(const char* title, v2f default_position, v2f default_size) {
 		usize title_len = strlen(title);
-		auto title_hash = elf_hash(reinterpret_cast<const u8*>(title), title_len);
+		auto id = elf_hash(reinterpret_cast<const u8*>(title), title_len);
 
 		auto text_dimentions = bound_font->dimentions(title);
 		auto padding = get_style_var(StyleVar::padding);
 
-		if (meta.count(title_hash) == 0) {
-			meta[title_hash] = {
+		if (meta.count(id) == 0) {
+			meta[id] = {
 				.position = default_position,
 				.dimentions = default_size,
 				.content_offset = v2f(padding, text_dimentions.y + padding),
@@ -135,17 +136,30 @@ namespace vkr {
 				.content_dimentions = v2f()
 			};
 
-			window = &meta[title_hash];
+			window = &meta[id];
 		}
 
 		cursor_pos = window->position + window->content_offset;
+
+		if (!dragging && !anything_hovered && rect_hovered(window->position, window->dimentions) && app->mouse_button_just_pressed(mouse_button_left)) {
+			dragging = id;
+			drag_offset = v2f(app->mouse_pos.x, app->mouse_pos.y) - window->position;
+		}
+
+		if (dragging == id) {
+			window->position = v2f(app->mouse_pos.x, app->mouse_pos.y) - drag_offset;
+
+			if (app->mouse_button_just_released(mouse_button_left)) {
+				dragging = 0;
+			}
+		}
 
 		cmd_draw_rect(window->position - v2f(1.0f), window->dimentions + v2f(2.0f), get_style_color(StyleColor::border));
 		cmd_draw_rect(window->position, window->dimentions, get_style_color(StyleColor::background));
 		cmd_set_clip(window->position + v2f(padding), window->dimentions - v2f(padding) * 2.0f);
 		cmd_draw_text(title, title_len,
 			v2f(window->position.x + window->content_offset.x + (window->max_content_dimentions.x / 2.0f) - (text_dimentions.x / 2.0f),
-			default_position.y + padding));
+			window->position.y + padding));
 
 		return true;
 	}
@@ -198,8 +212,11 @@ namespace vkr {
 
 		if (hot) {
 			color = get_style_color(StyleColor::hot);
+			anything_hot = true;
+			anything_hovered = true;
 		} else if (hovered) {
 			color = get_style_color(StyleColor::hovered);
+			anything_hovered = true;
 		}
 
 		cmd_draw_rect(position, dimentions, color);

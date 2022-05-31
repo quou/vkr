@@ -1482,9 +1482,16 @@ namespace vkr {
 	void Pipeline::set_scissor(v4i rect) {
 		if (video->skip_frame) { return; }
 
+		v2i d(rect.x < 0 ? -rect.x : 0, rect.y < 0 ? -rect.y : 0);
+
 		VkRect2D scissor = {
-			.offset = { .x     =      rect.x, .y      =      rect.y },
-			.extent = { .width = (u32)rect.z, .height = (u32)rect.w }
+			.offset = {
+				.x = std::max(rect.x, 0),
+				.y = std::max(rect.y, 0) },
+			.extent = {
+				.width  = static_cast<u32>(std::max(rect.z - d.x, 1)), 
+				.height = static_cast<u32>(std::max(rect.w - d.y, 1))
+			}
 		};
 
 		vkCmdSetScissor(video->handle->command_buffers[video->current_frame], 0, 1, &scissor);
