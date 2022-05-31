@@ -40,7 +40,7 @@ namespace vkr {
 		};
 
 		struct DrawTextCommand : public Command {
-			v2f position;
+			v2f position, dimentions;
 			char* text;
 		};
 
@@ -59,9 +59,11 @@ namespace vkr {
 		};
 
 		void cmd_draw_rect(v2f position, v2f dimentions, v4f color);
-		void cmd_draw_text(const char* text, usize len, v2f position);
+		void cmd_draw_text(const char* text, usize len, v2f position, v2f dimentions);
 		void cmd_bind_font(Font* font, v4f color);
 		void cmd_set_clip(v2f position, v2f dimentions);
+
+		bool rect_outside_clip(v2f position, v2f dimentions, Rect rect);
 
 		/* Fixed-size command buffer; allows one megabyte of commands.
 		 *
@@ -92,6 +94,9 @@ namespace vkr {
 		bool anything_hovered;
 		bool anything_hot;
 
+		u64 hot_item;
+		u64 hovered_item;
+
 		u64 dragging;
 		v2f drag_offset;
 
@@ -100,6 +105,8 @@ namespace vkr {
 
 		usize item;
 		f32 current_item_height;
+
+		u64 current_item_id;
 
 		App* app;
 	public:
@@ -118,6 +125,9 @@ namespace vkr {
 		void label(const char* text);
 		void text(const char* fmt, ...);
 		bool button(const char* text);
+		bool slider(f64);
+
+		u64 next_item_id();
 
 		void columns(usize count, f32 size);
 		f32 max_column_width();
