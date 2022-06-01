@@ -80,12 +80,12 @@ namespace vkr {
 		hot_item(0), hovered_item(0), top_window(0) {
 		set_style_var(StyleVar::padding, 3.0f);
 
-		set_style_color(StyleColor::background,  make_color(0x1a1a1a, 150));
-		set_style_color(StyleColor::background2, make_color(0x212121, 255));
+		set_style_color(StyleColor::background,  make_color(0x1a1a1a, 200));
+		set_style_color(StyleColor::background2, make_color(0x292929, 255));
 		set_style_color(StyleColor::background3, make_color(0x2d2d2d, 255));
-		set_style_color(StyleColor::hovered,     make_color(0x242533, 255));
+		set_style_color(StyleColor::hovered,     make_color(0x242543, 255));
 		set_style_color(StyleColor::hot,         make_color(0x393d5b, 255));
-		set_style_color(StyleColor::border,      make_color(0x0f0f0f, 200));
+		set_style_color(StyleColor::border,      make_color(0x0f0f0f, 255));
 	}
 
 	UIContext::~UIContext() {
@@ -165,8 +165,8 @@ namespace vkr {
 			Command* end = reinterpret_cast<Command*>(command_buffer + win->beginning->end_idx);
 
 			Rect current_clip = {
-				static_cast<i32>(win->position.x), static_cast<i32>(win->position.y),
-				static_cast<i32>(win->dimentions.x), static_cast<i32>(win->dimentions.y)
+				static_cast<i32>(win->position.x - 1.0f), static_cast<i32>(win->position.y - 1.0f),
+				static_cast<i32>(win->dimentions.x + 2.0f), static_cast<i32>(win->dimentions.y + 2.0f)
 			};
 			renderer->set_clip(current_clip);
 
@@ -247,7 +247,15 @@ namespace vkr {
 		columns(1, max_column_width());
 
 		window->beginning = cmd_begin_window();
-		cmd_draw_rect(window->position - v2f(1.0f), window->dimentions + v2f(2.0f), get_style_color(StyleColor::border));
+
+		/* Draw the border. */
+		cmd_draw_rect(window->position, v2f(window->dimentions.x, 1.0f), get_style_color(StyleColor::border));
+		cmd_draw_rect(window->position, v2f(1.0f, window->dimentions.y), get_style_color(StyleColor::border));
+		cmd_draw_rect(v2f(window->position.x, window->position.y + window->dimentions.y),
+			v2f(window->dimentions.x + 1, 1.0f), get_style_color(StyleColor::border));
+		cmd_draw_rect(v2f(window->position.x + window->dimentions.x, window->position.y),
+			v2f(1.0f, window->dimentions.y), get_style_color(StyleColor::border));
+
 		cmd_draw_rect(window->position, window->dimentions, get_style_color(StyleColor::background));
 		cmd_set_clip(window->position + v2f(padding), window->dimentions - v2f(padding) * 2.0f);
 		cmd_draw_text(title, title_len,
