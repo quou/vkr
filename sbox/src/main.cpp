@@ -48,6 +48,18 @@ public:
 		shaders.tonemap = Shader::from_file(video,
 			"res/shaders/tonemap.vert.spv",
 			"res/shaders/tonemap.frag.spv");
+		shaders.bright_extract = Shader::from_file(video,
+			"res/shaders/bright_extract.vert.spv",
+			"res/shaders/bright_extract.frag.spv");
+		shaders.blur_v = Shader::from_file(video,
+			"res/shaders/blur_v.vert.spv",
+			"res/shaders/blur_v.frag.spv");
+		shaders.blur_h = Shader::from_file(video,
+			"res/shaders/blur_h.vert.spv",
+			"res/shaders/blur_h.frag.spv");
+		shaders.composite = Shader::from_file(video,
+			"res/shaders/composite.vert.spv",
+			"res/shaders/composite.frag.spv");
 		shaders.shadowmap = Shader::from_file(video,
 			"res/shaders/shadowmap.vert.spv",
 			"res/shaders/shadowmap.frag.spv");
@@ -80,27 +92,48 @@ public:
 
 		Renderer3D::Material materials[] = {
 			{
-				.diffuse = wall_a,
-				.normal = wall_n
+				.diffuse_map = wall_a,
+				.normal_map = wall_n,
+				.emissive = 0.0f,
+				.diffuse = v3f(1.0f),
+				.specular = v3f(1.0f),
+				.ambient = v3f(1.0f)
 			},
 			{
-				.diffuse = wood_a,
+				.diffuse_map = wood_a,
+				.normal_map = null,
+				.emissive = 0.0f,
+				.diffuse = v3f(1.0f),
+				.specular = v3f(1.0f),
+				.ambient = v3f(1.0f)
 			},
 			{
-				.diffuse = null,
-				.normal = null
+				.diffuse_map = null,
+				.normal_map = null,
+				.emissive = 0.0f,
+				.diffuse = v3f(1.0f),
+				.specular = v3f(1.0f),
+				.ambient = v3f(1.0f)
+			},
+			{
+				.diffuse_map = null,
+				.normal_map = null,
+				.emissive = 10.0f,
+				.diffuse = v3f(1.0f, 0.0f, 0.0f),
+				.specular = v3f(1.0f, 0.0f, 0.0f),
+				.ambient = v3f(1.0f, 0.0f, 0.0f)
 			}
 		};
 
-		renderer = new Renderer3D(this, video, shaders, materials, 3);
+		renderer = new Renderer3D(this, video, shaders, materials, 4);
 
 		red_light = world.new_entity();
-		red_light.add(Transform { m4f::translate(m4f::identity(), v3f(-2.0f, 1.0f, 1.0f)) });
+		red_light.add(Transform { m4f::translate(m4f::identity(), v3f(-2.5f, 0.0f, 0.0f)) });
 		red_light.add(PointLight {
-			.intensity = 10.0f,
+			.intensity = 50.0f,
 			.specular = v3f(1.0f, 0.0f, 0.0f),
 			.diffuse = v3f(1.0f, 0.0f, 0.0f),
-			.range = 3.0f
+			.range = 1.0f
 		});
 
 		blue_light = world.new_entity();
@@ -119,11 +152,11 @@ public:
 
 		monkey1 = world.new_entity();
 		monkey1.add(Transform { m4f::translate(m4f::identity(), v3f(-2.5f, 0.0f, 0.0f)) });
-		monkey1.add(Renderable3D { monkey, 0 });
+		monkey1.add(Renderable3D { monkey, 3 });
 
 		monkey2 = world.new_entity();
 		monkey2.add(Transform { m4f::identity() });
-		monkey2.add(Renderable3D { monkey, 1 });
+		monkey2.add(Renderable3D { monkey, 0 });
 
 		ground = world.new_entity();
 		ground.add(Transform {
@@ -135,7 +168,7 @@ public:
 		monolith.add(Transform {
 			m4f::translate(m4f::identity(), v3f(2.5f, -2.0f, 0.0f)) *
 			m4f::scale(m4f::identity(), v3f(1.0f, 5.0f, 1.0f))});
-		monolith.add(Renderable3D { cube, 2 });
+		monolith.add(Renderable3D { cube, 1 });
 	}
 
 	void on_update(f64 ts) override {
@@ -215,6 +248,10 @@ public:
 		delete wood_a;
 		delete shaders.lit;
 		delete shaders.tonemap;
+		delete shaders.bright_extract;
+		delete shaders.blur_v;
+		delete shaders.blur_h;
+		delete shaders.composite;
 		delete shaders.shadowmap;
 		delete renderer2d;
 		delete sprite_shader;

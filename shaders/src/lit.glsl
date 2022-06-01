@@ -159,8 +159,16 @@ layout (location = 0) in VertexOut {
 	vec4 sun_pos;
 } fs_in;
 
+struct Material {
+	vec3 diffuse;
+	vec3 specular;
+	vec3 ambient;
+	float emissive;
+};
+
 layout (push_constant) uniform PushData {
 	layout(offset = 64)
+	Material material;
 	float use_diffuse_map;
 	float use_normal_map;
 } push_data;
@@ -183,12 +191,14 @@ vec3 compute_point_light(vec3 normal, vec3 view_dir, PointLight light) {
 		attenuation *
 		light.diffuse *
 		light.intensity *
+		push_data.material.diffuse *
 		max(dot(light_dir, normal), 0.0);
 
 	vec3 specular =
 		attenuation *
 		light.specular *
 		light.intensity *
+		push_data.material.specular * 
 		pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
 
 	return diffuse + specular;
@@ -237,11 +247,13 @@ vec3 compute_directional_light(vec3 normal, vec3 view_dir, DirectionalLight ligh
 	vec3 diffuse =
 		light.diffuse *
 		light.intensity *
+		push_data.material.diffuse *
 		max(dot(light_dir, normal), 0.0);
 
 	vec3 specular =
 		light.specular *
 		light.intensity *
+		push_data.material.specular * 
 		pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
 
 	const float light_size = 0.2;
@@ -280,7 +292,7 @@ void main() {
 
 	vec3 view_dir = normalize(data.camera_pos - fs_in.world_pos);
 
-	vec3 lighting_result = vec3(0.1);
+	vec3 lighting_result = vec3(0.1 * push_data.material.ambient + (push_data.material.ambient * push_data.material.emissive));
 
 	for (int i = 0; i < data.point_light_count; i++) {
 		lighting_result += compute_point_light(normal, view_dir, data.point_lights[i]);

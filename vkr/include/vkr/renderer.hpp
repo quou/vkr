@@ -42,8 +42,13 @@ namespace vkr {
 	class VKR_API Renderer3D {
 	public:
 		struct Material {
-			Texture* diffuse;
-			Texture* normal;
+			Texture* diffuse_map;
+			Texture* normal_map;
+
+			f32 emissive;
+			v3f diffuse;
+			v3f specular;
+			v3f ambient;
 
 			static constexpr usize get_texture_count() { return 2; }
 		};
@@ -51,6 +56,10 @@ namespace vkr {
 		struct ShaderConfig {
 			Shader* lit;
 			Shader* tonemap;
+			Shader* bright_extract;
+			Shader* blur_v;
+			Shader* blur_h;
+			Shader* composite;
 			Shader* shadowmap;
 		};
 	private:
@@ -68,6 +77,13 @@ namespace vkr {
 			alignas(16) v3f diffuse;
 			alignas(16) v3f specular;
 			alignas(16) v3f direction;
+		};
+
+		struct impl_Material {
+			alignas(16) v3f diffuse;
+			alignas(16) v3f specular;
+			alignas(16) v3f ambient;
+			alignas(4)  f32 emissive;
 		};
 
 		struct {
@@ -101,8 +117,9 @@ namespace vkr {
 		} v_pc;
 
 		struct {
-			f32 use_diffuse_map;
-			f32 use_normal_map;
+			impl_Material material;
+			alignas(4) f32 use_diffuse_map;
+			alignas(4) f32 use_normal_map;
 		} f_pc;
 
 		VertexBuffer* fullscreen_tri;
@@ -111,7 +128,11 @@ namespace vkr {
 		Pipeline* shadow_pip;
 		App* app;
 
+		PostProcessStep* bright_extract;
+		PostProcessStep* blur_v;
+		PostProcessStep* blur_h;
 		PostProcessStep* tonemap;
+		PostProcessStep* composite;
 
 		Texture* default_texture;
 

@@ -104,12 +104,21 @@ namespace vkr {
 
 	void PostProcessStep::execute() {
 		pipeline->begin();
+		
+		if (!use_default_fb) {
+			framebuffer->begin();
+		}
+
 		pipeline->bind_descriptor_set(0, 0);
 		pipeline->bind_descriptor_set(1, 1);
 
 		renderer->fullscreen_tri->bind();
 		renderer->fullscreen_tri->draw(3);
 		pipeline->end();
+
+		if (!use_default_fb) {
+			framebuffer->end();
+		}
 	}
 
 	Renderer3D::Renderer3D(App* app, VideoContext* video, const ShaderConfig& shaders, Material* materials, usize material_count) :
@@ -241,13 +250,13 @@ namespace vkr {
 			tex_descs[0].binding = 0;
 			tex_descs[0].stage = Pipeline::Stage::fragment;
 			tex_descs[0].resource.type = Pipeline::ResourcePointer::Type::texture;
-			tex_descs[0].resource.texture.ptr = materials[i].diffuse != null ? materials[i].diffuse : default_texture;
+			tex_descs[0].resource.texture.ptr = materials[i].diffuse_map != null ? materials[i].diffuse_map : default_texture;
 
 			tex_descs[1].name = "normal";
 			tex_descs[1].binding = 1;
 			tex_descs[1].stage = Pipeline::Stage::fragment;
 			tex_descs[1].resource.type = Pipeline::ResourcePointer::Type::texture;
-			tex_descs[1].resource.texture.ptr = materials[i].normal != null ? materials[i].normal : default_texture;
+			tex_descs[1].resource.texture.ptr = materials[i].normal_map != null ? materials[i].normal_map : default_texture;
 
 			set->descriptors = tex_descs;
 			set->count = Material::get_texture_count();
@@ -297,6 +306,36 @@ namespace vkr {
 
 		fullscreen_tri = new VertexBuffer(video, tri_verts, sizeof(tri_verts));
 
+		PostProcessStep::Dependency bright_extract_deps[] = {
+			{
+				.name = "color",
+				.framebuffer = scene_fb,
+				.attachment = 0
+			}
+		};
+
+		bright_extract = new PostProcessStep(this, shaders.bright_extract, bright_extract_deps, 1);
+
+		PostProcessStep::Dependency blur_v_deps[] = {
+			{
+				.name = "color",
+				.framebuffer = bright_extract->get_framebuffer(),
+				.attachment = 0
+			}
+		};
+
+		blur_v = new PostProcessStep(this, shaders.blur_v, blur_v_deps, 1);
+
+		PostProcessStep::Dependency blur_h_deps[] = {
+			{
+				.name = "color",
+				.framebuffer = blur_v->get_framebuffer(),
+				.attachment = 0
+			}
+		};
+
+		blur_h = new PostProcessStep(this, shaders.blur_h, blur_h_deps, 1);
+
 		PostProcessStep::Dependency tonemap_deps[] = {
 			{
 				.name = "color",
@@ -305,7 +344,22 @@ namespace vkr {
 			}
 		};
 
-		tonemap = new PostProcessStep(this, shaders.tonemap, tonemap_deps, 1, true);
+		tonemap = new PostProcessStep(this, shaders.tonemap, tonemap_deps, 1);
+
+		PostProcessStep::Dependency composite_deps[] = {
+			{
+				.name = "tonemapped_scene",
+				.framebuffer = tonemap->get_framebuffer(),
+				.attachment = 0
+			},
+			{
+				.name = "bloom",
+				.framebuffer = blur_h->get_framebuffer(),
+				.attachment = 0
+			}
+		};
+
+		composite = new PostProcessStep(this, shaders.composite, composite_deps, 2, true);
 
 		for (usize i = 0; i < material_count; i++) {
 			delete[] desc_sets[i + 1].descriptors;
@@ -323,6 +377,10 @@ namespace vkr {
 		delete shadow_pip;
 		delete shadow_fb;
 		delete tonemap;
+		delete composite;
+		delete bright_extract;
+		delete blur_v;
+		delete blur_h;
 		delete scene_pip;
 
 		delete[] materials;
@@ -446,8 +504,15 @@ namespace vkr {
 			scene_pip->bind_descriptor_set(0, 0);
 			scene_pip->bind_descriptor_set(1, 1 + material_id);
 
-			f_pc.use_diffuse_map = materials[material_id].diffuse == null ? 0.0f : 1.0f;
-			f_pc.use_normal_map = materials[material_id].normal == null ? 0.0f : 1.0f;
+			auto& material = materials[material_id];
+
+			f_pc.use_diffuse_map = material.diffuse_map == null ? 0.0f : 1.0f;
+			f_pc.use_normal_map = material.normal_map == null ? 0.0f : 1.0f;
+
+			f_pc.material.emissive = material.emissive;
+			f_pc.material.diffuse = material.diffuse;
+			f_pc.material.specular = material.specular;
+			f_pc.material.ambient = material.ambient;
 
 			v_pc.transform = trans.m;
 			for (auto mesh : model->meshes) {
@@ -460,10 +525,15 @@ namespace vkr {
 
 		scene_pip->end();
 		scene_fb->end();
+
+		tonemap->execute();
+		bright_extract->execute();
+		blur_v->execute();
+		blur_h->execute();
 	}
 
 	void Renderer3D::draw_to_default_framebuffer() {
-		tonemap->execute();
+		composite->execute();
 	}
 
 	Mesh3D* Mesh3D::from_wavefront(Model3D* model, VideoContext* video, WavefrontModel* wmodel, WavefrontModel::Mesh* wmesh) {
