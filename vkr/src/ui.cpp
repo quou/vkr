@@ -77,11 +77,12 @@ namespace vkr {
 	}
 
 	UIContext::UIContext(App* app) : app(app), dragging(0), anything_hovered(false), anything_hot(false),
-		hot_item(0), hovered_item(0) {
+		hot_item(0), hovered_item(0), top_window(0) {
 		set_style_var(StyleVar::padding, 3.0f);
 
 		set_style_color(StyleColor::background,  make_color(0x1a1a1a, 150));
-		set_style_color(StyleColor::background2, make_color(0x2d2d2d, 255));
+		set_style_color(StyleColor::background2, make_color(0x212121, 255));
+		set_style_color(StyleColor::background3, make_color(0x2d2d2d, 255));
 		set_style_color(StyleColor::hovered,     make_color(0x242533, 255));
 		set_style_color(StyleColor::hot,         make_color(0x393d5b, 255));
 		set_style_color(StyleColor::border,      make_color(0x0f0f0f, 200));
@@ -113,6 +114,10 @@ namespace vkr {
 			sorted_windows.push_back(&m.second);
 		}
 
+		if (app->mouse_button_just_released(mouse_button_left)) {
+			hot_item = 0;
+		}
+
 		/* Bring the top-most clicked window to the top and initiate a drag. */
 		if (app->mouse_button_just_pressed(mouse_button_left)) {
 			std::sort(sorted_windows.begin(), sorted_windows.end(),
@@ -125,7 +130,7 @@ namespace vkr {
 					win->z = 0.0f;
 					top_window = win->id;
 
-					if (!dragging && !anything_hovered) {
+					if (!dragging && !anything_hovered && !anything_hot) {
 						dragging = win->id;
 						drag_offset = v2f(app->mouse_pos.x, app->mouse_pos.y) - win->position;
 					}
@@ -342,6 +347,48 @@ namespace vkr {
 		advance(text_dim.y + padding * 3.0f);
 
 		return clicked && window->id == top_window;
+	}
+
+	void UIContext::slider(f64* val, f64 min, f64 max) {
+		auto id = next_item_id();
+
+		const f32 track_height = 3.0f;
+
+		auto padding = get_style_var(StyleVar::padding);
+
+		v2f handle_dim(10.0f, 15.0f);
+
+		v2f con_pos = cursor_pos;
+		v2f con_dim(column_size - padding * 2.0f, handle_dim.y);
+
+		v2f handle_pos(
+			con_pos.x + static_cast<f32>((*val - min) * static_cast<f64>(con_dim.x - handle_dim.x) / (max - min)),
+			con_pos.y
+		);
+
+		auto handle_color = get_style_color(StyleColor::background2);
+
+		if (top_window == window->id && rect_hovered(handle_pos, handle_dim)) {
+			if (app->mouse_button_just_pressed(mouse_button_left)) {
+				hot_item = id;
+			}
+
+			handle_color = get_style_color(StyleColor::hovered);
+		}
+
+		if (hot_item == id) {
+			*val = min + (app->mouse_pos.x - con_pos.x) * (max - min) / con_dim.x;
+
+			*val = std::clamp(*val, min, max);
+
+			handle_color = get_style_color(StyleColor::hot);
+		}
+
+		cmd_draw_rect(v2f(con_pos.x, con_pos.y + (handle_dim.y / 2.0f) - (track_height / 2.0f)),
+			v2f(con_dim.x, track_height), get_style_color(StyleColor::background3));
+		cmd_draw_rect(handle_pos, handle_dim, handle_color);
+
+		advance(con_dim.y + padding);
 	}
 
 	void UIContext::columns(usize count, f32 size) {

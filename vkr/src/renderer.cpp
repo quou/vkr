@@ -427,6 +427,7 @@ namespace vkr {
 
 		f_ub.sun.direction = sun.direction;
 		f_ub.sun.intensity = sun.intensity;
+		f_ub.sun.bias = sun.bias;
 		f_ub.sun.diffuse = sun.diffuse;
 		f_ub.sun.specular = sun.specular;
 

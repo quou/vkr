@@ -130,6 +130,7 @@ struct PointLight {
 
 struct DirectionalLight {
 	float intensity;
+	float bias;
 	vec3 diffuse;
 	vec3 specular;
 	vec3 direction;
@@ -194,9 +195,8 @@ vec3 compute_point_light(vec3 normal, vec3 view_dir, PointLight light) {
 }
 
 /* Find the average depth of the light blockers. */
-float blocker_dist(vec3 coords, float size) {
+float blocker_dist(vec3 coords, float size, float bias) {
 	const int sample_count = 64;
-	const float bias = 0.005;
 
 	int blocker_count = 0;
 	float r = 0.0;
@@ -246,13 +246,11 @@ vec3 compute_directional_light(vec3 normal, vec3 view_dir, DirectionalLight ligh
 
 	const float light_size = 0.2;
 
-	const float bias = 0.001;
-
 	/* Shadow calculation. */
 	vec3 coords = fs_in.sun_pos.xyz / fs_in.sun_pos.w;
 	coords.xy = coords.xy * 0.5 + 0.5;
 
-	float blocker = blocker_dist(coords, light_size);
+	float blocker = blocker_dist(coords, light_size, data.sun.bias);
 	if (blocker == -1.0) {
 		return diffuse + specular;
 	}
@@ -265,7 +263,7 @@ vec3 compute_directional_light(vec3 normal, vec3 view_dir, DirectionalLight ligh
 	float texel_size = 1.0 / textureSize(shadowmap, 0).x;
 
 	float pcf_radius = penumbra * light_size * data.near_plane / coords.z;
-	float shadow = pcf(coords, pcf_radius, bias);
+	float shadow = pcf(coords, pcf_radius, data.sun.bias);
 
 	return (1.0 - shadow) * (diffuse + specular);
 }

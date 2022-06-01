@@ -142,25 +142,23 @@ public:
 		ui->begin(get_size());
 		ui->use_font(dejavusans);
 
-		if (ui->begin_window("Test Window")) {
+		if (ui->begin_window("Debug")) {
 			ui->text("FPS: %g", 1.0 / ts);
-			ui->label("Hello, I'm a label.");
-			ui->label("I'm another label.");
 
-			if (ui->button("Button")) {
-				info("Button pressed.");
-			}
+			ui->columns(3, 35.0f);
+			ui->label("Bias");
+			static f64 bias = 0.0;
+			ui->columns(3, ui->max_column_width() - (50.0f + 35.0f));
+			ui->slider(&bias, -0.1, 0.1);
+			ui->columns(3, 50.0f);
+			ui->text("%.2g", bias);
 
-			if (ui->button("Another Button")) {
-				info("Another button pressed.");
-			}
-
-			ui->label("I'm a label that's going to be clipped off.");
+			renderer->sun.bias = static_cast<f32>(bias);
 
 			ui->end_window();
 		}
 
-		if (ui->begin_window("Test Window 2", v2f(500, 100))) {
+		if (ui->begin_window("Test Window", v2f(500, 100))) {
 			ui->columns(2, ui->max_column_width() / 2.0f);
 			ui->label("Label");
 			ui->button("Button");

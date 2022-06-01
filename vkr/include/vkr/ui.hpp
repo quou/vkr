@@ -19,6 +19,7 @@ namespace vkr {
 		enum class StyleColor : u32 {
 			background = 0,
 			background2,
+			background3,
 			hovered,
 			hot,
 			border,
@@ -143,7 +144,7 @@ namespace vkr {
 		void label(const char* text);
 		void text(const char* fmt, ...);
 		bool button(const char* text);
-		bool slider(f64);
+		void slider(f64* val, f64 min = 0.0, f64 max = 1.0);
 
 		u64 next_item_id();
 
