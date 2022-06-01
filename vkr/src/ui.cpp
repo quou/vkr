@@ -96,7 +96,7 @@ namespace vkr {
 		this->screen_size = screen_size;
 		command_buffer_idx = 0;
 		current_item_height = 0.0f;
-		item = 0;
+		column = 0;
 
 		current_item_id = 1;
 
@@ -244,7 +244,7 @@ namespace vkr {
 			}
 		}
 
-		columns(1, max_column_width());
+		columns(1, 1.0f);
 
 		window->beginning = cmd_begin_window();
 
@@ -367,7 +367,7 @@ namespace vkr {
 		v2f handle_dim(10.0f, 15.0f);
 
 		v2f con_pos = cursor_pos;
-		v2f con_dim(column_size - padding * 2.0f, handle_dim.y);
+		v2f con_dim(column_widths[column] - padding * 2.0f, handle_dim.y);
 
 		v2f handle_pos(
 			con_pos.x + static_cast<f32>((*val - min) * static_cast<f64>(con_dim.x - handle_dim.x) / (max - min)),
@@ -399,29 +399,37 @@ namespace vkr {
 		advance(con_dim.y + padding);
 	}
 
-	void UIContext::columns(usize count, f32 size) {
-		column_count = count;
-		column_size = size;
-	}
+	void UIContext::columns(usize count, ...) {
+		column_widths.resize(count);
 
-	f32 UIContext::max_column_width() {
-		return window->max_content_dimentions.x;
+		va_list args;
+		va_start(args, count);
+
+		for (usize i = 0; i < count; i++) {
+			auto arg = va_arg(args, f64);
+			column_widths[i] = static_cast<f32>(arg) * window->max_content_dimentions.x;
+		}
+
+		va_end(args);
+
+		column_count = count;
+		column = 0;
 	}
 
 	void UIContext::advance(f32 last_height) {
-		item++;
-
 		if (last_height > current_item_height) {
 			current_item_height = last_height;
 		}
 
-		if (item >= column_count) {
+		cursor_pos.x += column_widths[column];
+
+		column++;
+
+		if (column >= column_count) {
 			cursor_pos.x = window->position.x + window->content_offset.x;
 			cursor_pos.y += current_item_height;
 			current_item_height = 0;
-			item = 0;
-		} else {
-			cursor_pos.x += column_size;
+			column = 0;
 		}
 	}
 }

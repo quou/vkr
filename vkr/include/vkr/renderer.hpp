@@ -109,7 +109,10 @@ namespace vkr {
 		} f_ub;
 
 		struct {
-			v2f screen_size;
+			alignas(4) f32 bloom_threshold;
+			alignas(4) f32 bloom_blur_intensity;
+			alignas(4) f32 bloom_intensity;
+			alignas(8) v2f screen_size;
 		} f_post_ub;
 
 		struct {
@@ -155,6 +158,13 @@ namespace vkr {
 			v3f specular;
 			v3f diffuse;
 		} sun;
+
+		/* Post processing config. */
+		struct {
+			f32 bloom_threshold;
+			f32 bloom_blur_intensity;
+			f32 bloom_intensity;
+		} pp_config;
 
 		Renderer3D(App* app, VideoContext* video, const ShaderConfig& shaders, Material* materials, usize material_count);
 		~Renderer3D();

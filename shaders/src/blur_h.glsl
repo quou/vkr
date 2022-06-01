@@ -27,8 +27,15 @@ layout (location = 0) in VertexOut {
 
 layout (set = 1, binding = 0) uniform sampler2D input_texture;
 
+layout (binding = 0) uniform Config {
+	float bloom_threshold;
+	float bloom_blur_intensity;
+	float bloom_intensity;
+	vec2 screen_size;
+} config;
+
 void main() {
-	float blur_amt = 300.0;
+	float blur_amt = config.bloom_blur_intensity;
 
 	vec4 accum = vec4(0.0);
 	float tap_count = 0;

@@ -2119,9 +2119,9 @@ namespace vkr {
 		sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 		sampler_info.magFilter = (flags & Flags::filter_linear) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
 		sampler_info.minFilter = (flags & Flags::filter_linear) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-		sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		sampler_info.addressModeU = (flags & Flags::clamp) ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE : VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		sampler_info.addressModeV = (flags & Flags::clamp) ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE : VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		sampler_info.addressModeW = (flags & Flags::clamp) ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE : VK_SAMPLER_ADDRESS_MODE_REPEAT;
 		sampler_info.anisotropyEnable = VK_FALSE;
 		sampler_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 		sampler_info.unnormalizedCoordinates = VK_FALSE;

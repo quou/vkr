@@ -423,7 +423,9 @@ namespace vkr {
 		enum Flags {
 			filter_linear = 1 << 0,
 			filter_none   = 1 << 1,
-			shadow        = 1 << 1,
+			shadow        = 1 << 2,
+			clamp         = 1 << 3,
+			repeat        = 1 << 4,
 		} flags;
 
 		Sampler(VideoContext* video, Flags flags);

@@ -28,8 +28,15 @@ layout (location = 0) in VertexOut {
 layout (set = 1, binding = 0) uniform sampler2D tonemapped_scene;
 layout (set = 1, binding = 1) uniform sampler2D bloom;
 
+layout (binding = 0) uniform Config {
+	float bloom_threshold;
+	float bloom_blur_intensity;
+	float bloom_intensity;
+	vec2 screen_size;
+} config;
+
 void main() {
-	color = texture(tonemapped_scene, fs_in.uv) + texture(bloom, fs_in.uv);
+	color = texture(tonemapped_scene, fs_in.uv) + texture(bloom, fs_in.uv) * config.bloom_intensity;
 }
 
 #end FRAGMENT

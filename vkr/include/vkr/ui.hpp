@@ -103,6 +103,7 @@ namespace vkr {
 		}* window;
 
 		std::vector<WindowMeta*> sorted_windows;
+		std::vector<f32> column_widths;
 
 		std::unordered_map<u64, WindowMeta> meta;
 
@@ -120,9 +121,8 @@ namespace vkr {
 		v2f drag_offset;
 
 		usize column_count;
-		f32 column_size;
 
-		usize item;
+		usize column;
 		f32 current_item_height;
 
 		u64 current_item_id;
@@ -136,7 +136,7 @@ namespace vkr {
 		void end();
 		void draw(Renderer2D* renderer);
 
-		bool begin_window(const char* title, v2f default_position = v2f(30, 30), v2f default_size = v2f(200, 300));
+		bool begin_window(const char* title, v2f default_position = v2f(30, 30), v2f default_size = v2f(500, 300));
 		void end_window();
 
 		void use_font(Font* font, v4f color = v4f(1.0f, 1.0f, 1.0f, 1.0f));
@@ -148,8 +148,7 @@ namespace vkr {
 
 		u64 next_item_id();
 
-		void columns(usize count, f32 size);
-		f32 max_column_width();
+		void columns(usize count, ...);
 
 		/* Advances the cursor position to the correct
 		 * place to draw the next element. `last_height'

@@ -124,8 +124,12 @@ namespace vkr {
 	Renderer3D::Renderer3D(App* app, VideoContext* video, const ShaderConfig& shaders, Material* materials, usize material_count) :
 		app(app), model(null) {
 
-		shadow_sampler = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow);
-		fb_sampler     = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow);
+		pp_config.bloom_threshold = 2.0f;
+		pp_config.bloom_blur_intensity = 350.0f;
+		pp_config.bloom_intensity = 0.2f;
+
+		shadow_sampler = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow | Sampler::Flags::clamp);
+		fb_sampler     = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow | Sampler::Flags::clamp);
 
 		default_texture = new Texture(video, (const void*)default_texture_data, v2i(2, 2),
 			Texture::Flags::dimentions_2 | Texture::Flags::filter_none | Texture::Flags::format_rgba8);
@@ -525,6 +529,11 @@ namespace vkr {
 
 		scene_pip->end();
 		scene_fb->end();
+
+		f_post_ub.screen_size = v2f(static_cast<f32>(size.x), static_cast<f32>(size.y));
+		f_post_ub.bloom_threshold = pp_config.bloom_threshold;
+		f_post_ub.bloom_blur_intensity = pp_config.bloom_blur_intensity;
+		f_post_ub.bloom_intensity = pp_config.bloom_intensity;
 
 		tonemap->execute();
 		bright_extract->execute();

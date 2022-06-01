@@ -25,6 +25,13 @@ layout (location = 0) in VertexOut {
 	vec2 uv;
 } fs_in;
 
+layout (binding = 0) uniform Config {
+	float bloom_threshold;
+	float bloom_blur_intensity;
+	float bloom_intensity;
+	vec2 screen_size;
+} config;
+
 layout (set = 1, binding = 0) uniform sampler2D input_texture;
 
 void main() {
@@ -32,7 +39,7 @@ void main() {
 
 	float pixel_brightness = dot(tc.rgb, vec3(0.2126, 0.7152, 0.0722));
 
-	if (pixel_brightness > 2.0) {
+	if (pixel_brightness > config.bloom_threshold) {
 		color = tc;
 	} else {
 		color = vec4(0.0, 0.0, 0.0, 1.0);

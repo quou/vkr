@@ -15,7 +15,10 @@ private:
 	Shader* sprite_shader;
 
 	f32 rot = 0.0f;
-	f64 time = 0.0f;
+	f64 time = 0.0;
+
+	f64 fps = 0.0;
+	f64 fps_update = 0.0;
 
 	Renderer3D::ShaderConfig shaders;
 
@@ -118,10 +121,10 @@ public:
 			{
 				.diffuse_map = null,
 				.normal_map = null,
-				.emissive = 10.0f,
-				.diffuse = v3f(1.0f, 0.0f, 0.0f),
-				.specular = v3f(1.0f, 0.0f, 0.0f),
-				.ambient = v3f(1.0f, 0.0f, 0.0f)
+				.emissive = 5.0f,
+				.diffuse = v3f(1.0f, 0.3f, 0.3f),
+				.specular = v3f(1.0f, 0.3f, 0.3f),
+				.ambient = v3f(1.0f, 0.3f, 0.3f)
 			}
 		};
 
@@ -176,28 +179,52 @@ public:
 		ui->use_font(dejavusans);
 
 		if (ui->begin_window("Debug")) {
-			ui->text("FPS: %g", 1.0 / ts);
+			if (fps_update <= 0.0) {
+				fps = 1.0 / ts;
+				fps_update = 1.0;
+			}
 
-			ui->columns(3, 35.0f);
-			ui->label("Bias");
-			static f64 bias = 0.0;
-			ui->columns(3, ui->max_column_width() - (50.0f + 35.0f));
-			ui->slider(&bias, -0.1, 0.1);
-			ui->columns(3, 50.0f);
-			ui->text("%.2g", bias);
+			fps_update -= ts;
 
-			renderer->sun.bias = static_cast<f32>(bias);
+			ui->text("FPS: %g", fps);
+
+			ui->columns(3, 0.30, 0.5, 0.20);
+
+			ui->label("Shadow Bias");
+			static f64 new_bias = 0.0;
+			ui->slider(&new_bias, -0.1, 0.1);
+			ui->text("%.2f", new_bias);
+
+			ui->label("Bloom Threshold");
+			static f64 new_bloom_threshold = renderer->pp_config.bloom_threshold;
+			ui->slider(&new_bloom_threshold, 0.0, 10.0);
+			ui->text("%.2f", new_bloom_threshold);
+
+			ui->label("Bloom Blur Intensity");
+			static f64 new_bloom_blur_int = renderer->pp_config.bloom_blur_intensity;
+			ui->slider(&new_bloom_blur_int, 0.0, 1000.0);
+			ui->text("%.2f", new_bloom_blur_int);
+
+			ui->label("Bloom Intensity");
+			static f64 new_bloom_int = renderer->pp_config.bloom_intensity;
+			ui->slider(&new_bloom_int , 0.0, 1.0);
+			ui->text("%.2f", new_bloom_int);
+
+			renderer->sun.bias = static_cast<f32>(new_bias);
+			renderer->pp_config.bloom_threshold = static_cast<f32>(new_bloom_threshold);
+			renderer->pp_config.bloom_blur_intensity = static_cast<f32>(new_bloom_blur_int);
+			renderer->pp_config.bloom_intensity = static_cast<f32>(new_bloom_int);
 
 			ui->end_window();
 		}
 
 		if (ui->begin_window("Test Window", v2f(500, 100))) {
-			ui->columns(2, ui->max_column_width() / 2.0f);
+			ui->columns(2, 0.5f, 0.5f);
 			ui->label("Label");
 			ui->button("Button");
 			ui->label("Label");
 			ui->button("Button");
-			ui->columns(3, ui->max_column_width() / 3.0f);
+			ui->columns(3, 0.33f, 0.33f, 0.33f);
 			ui->label("Label");
 			ui->label("Label");
 			ui->label("Label");
