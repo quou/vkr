@@ -56,6 +56,18 @@ namespace vkr {
 		command_buffer_idx += cmd->size;
 	}
 
+	UIContext::BeginWindowCommand* UIContext::cmd_begin_window() {
+		BeginWindowCommand* cmd = reinterpret_cast<BeginWindowCommand*>(command_buffer + command_buffer_idx);
+		cmd->type = Command::Type::begin_window;
+		cmd->size = sizeof(*cmd);
+		cmd->beginning_idx = command_buffer_idx;
+		cmd->end_idx = 0;
+
+		command_buffer_idx += cmd->size;
+
+		return cmd;
+	}
+
 	bool UIContext::rect_outside_clip(v2f position, v2f dimentions, Rect clip) {
 		return
 			static_cast<i32>(position.x) + static_cast<i32>(dimentions.x) > clip.x + clip.w ||
@@ -64,7 +76,8 @@ namespace vkr {
 			static_cast<i32>(position.y)                                  < clip.y;
 	}
 
-	UIContext::UIContext(App* app) : app(app), dragging(0), anything_hovered(false), anything_hot(false) {
+	UIContext::UIContext(App* app) : app(app), dragging(0), anything_hovered(false), anything_hot(false),
+		hot_item(0), hovered_item(0) {
 		set_style_var(StyleVar::padding, 3.0f);
 
 		set_style_color(StyleColor::background,  make_color(0x1a1a1a, 150));
@@ -92,57 +105,105 @@ namespace vkr {
 	void UIContext::end() {
 		anything_hot = hot_item != 0;
 		anything_hovered = hovered_item != 0;
+
+		sorted_windows.clear();
+
+		for (auto& m : meta) {
+			m.second.id = m.first;
+			sorted_windows.push_back(&m.second);
+		}
+
+		/* Bring the top-most clicked window to the top and initiate a drag. */
+		if (app->mouse_button_just_pressed(mouse_button_left)) {
+			std::sort(sorted_windows.begin(), sorted_windows.end(),
+				[](WindowMeta* a, WindowMeta* b){
+					return a->z < b->z;
+				});
+
+			for (auto win : sorted_windows) {
+				if (rect_hovered(win->position, win->dimentions)) {
+					win->z = 0.0f;
+					top_window = win->id;
+
+					if (!dragging && !anything_hovered) {
+						dragging = win->id;
+						drag_offset = v2f(app->mouse_pos.x, app->mouse_pos.y) - win->position;
+					}
+
+					for (auto& m : meta) { if (&m.second != win) { m.second.z += 1.0f; } }
+
+					break;
+				}
+			}
+
+			/* For bringing windows to the top, they must be in the reverse order
+			 * that rendering requires, so we sort them front to back and then reverse
+			 * them again once the pick is done. This is a bit bad, but it's fine
+			 * because it only ever happens on a mouse click, not every frame. */
+			std::reverse(sorted_windows.begin(), sorted_windows.end());
+		} else {
+			std::sort(sorted_windows.begin(), sorted_windows.end(),
+				[](WindowMeta* a, WindowMeta* b) {
+					return a->z > b->z;
+				});
+		}
 	}
 
 	void UIContext::draw(Renderer2D* renderer) {
-		Command* cmd = reinterpret_cast<Command*>(command_buffer);
-		Command* end = reinterpret_cast<Command*>(command_buffer + command_buffer_idx);
-
-		Rect current_clip = { 0, 0, screen_size.x, screen_size.y };
-
 		#define commit_clip(cmd_) \
 					if (rect_outside_clip((cmd_)->position, (cmd_)->dimentions, current_clip)) { \
 						renderer->set_clip(current_clip); \
 					}
 
-		while (cmd != end) {
-			switch (cmd->type) {
-				case Command::Type::draw_rect: {
-					auto draw_rect_cmd = static_cast<DrawRectCommand*>(cmd);
+		for (const auto& win : sorted_windows) {
+			Command* cmd = reinterpret_cast<Command*>(command_buffer + win->beginning->beginning_idx);
+			Command* end = reinterpret_cast<Command*>(command_buffer + win->beginning->end_idx);
 
-					commit_clip(draw_rect_cmd);
+			Rect current_clip = {
+				static_cast<i32>(win->position.x), static_cast<i32>(win->position.y),
+				static_cast<i32>(win->dimentions.x), static_cast<i32>(win->dimentions.y)
+			};
+			renderer->set_clip(current_clip);
 
-					renderer->push(Renderer2D::Quad {
-						.position = draw_rect_cmd->position,
-						.dimentions = draw_rect_cmd->dimentions,
-						.color = draw_rect_cmd->color
-					});
-				} break;
-				case Command::Type::bind_font: {
-					auto bind_font_cmd = static_cast<BindFontCommand*>(cmd);
+			while (cmd != end) {
+				switch (cmd->type) {
+					case Command::Type::draw_rect: {
+						auto draw_rect_cmd = static_cast<DrawRectCommand*>(cmd);
 
-					bound_font = bind_font_cmd->font;
-					bound_font_color = bind_font_cmd->color;
-				} break;
-				case Command::Type::draw_text: {
-					auto draw_text_cmd = static_cast<DrawTextCommand*>(cmd);
+						commit_clip(draw_rect_cmd);
 
-					commit_clip(draw_text_cmd);
+						renderer->push(Renderer2D::Quad {
+							.position = draw_rect_cmd->position,
+							.dimentions = draw_rect_cmd->dimentions,
+							.color = draw_rect_cmd->color
+						});
+					} break;
+					case Command::Type::bind_font: {
+						auto bind_font_cmd = static_cast<BindFontCommand*>(cmd);
 
-					renderer->push(bound_font, draw_text_cmd->text, draw_text_cmd->position, bound_font_color);
-				} break;
-				case Command::Type::set_clip: {
-					auto set_clip_cmd = static_cast<SetClipCommand*>(cmd);
+						bound_font = bind_font_cmd->font;
+						bound_font_color = bind_font_cmd->color;
+					} break;
+					case Command::Type::draw_text: {
+						auto draw_text_cmd = static_cast<DrawTextCommand*>(cmd);
 
-					current_clip = Rect {
-						(i32)set_clip_cmd->position.x,   (i32)set_clip_cmd->position.y,
-						(i32)set_clip_cmd->dimentions.x, (i32)set_clip_cmd->dimentions.y,
-					};
-				} break;
-				default: break;
+						commit_clip(draw_text_cmd);
+
+						renderer->push(bound_font, draw_text_cmd->text, draw_text_cmd->position, bound_font_color);
+					} break;
+					case Command::Type::set_clip: {
+						auto set_clip_cmd = static_cast<SetClipCommand*>(cmd);
+
+						current_clip = Rect {
+							(i32)set_clip_cmd->position.x,   (i32)set_clip_cmd->position.y,
+							(i32)set_clip_cmd->dimentions.x, (i32)set_clip_cmd->dimentions.y,
+						};
+					} break;
+					default: break;
+				}
+
+				cmd = reinterpret_cast<Command*>((reinterpret_cast<u8*>(cmd)) + cmd->size);
 			}
-
-			cmd = reinterpret_cast<Command*>((reinterpret_cast<u8*>(cmd)) + cmd->size);
 		}
 
 		#undef commit_clip
@@ -161,18 +222,14 @@ namespace vkr {
 				.dimentions = default_size,
 				.content_offset = v2f(padding, text_dimentions.y + padding),
 				.max_content_dimentions = default_size - v2f(padding),
-				.content_dimentions = v2f()
+				.content_dimentions = v2f(),
+				.z = 1.0f
 			};
-
-			window = &meta[id];
 		}
+
+		window = &meta[id];
 
 		cursor_pos = window->position + window->content_offset;
-
-		if (!dragging && !anything_hovered && rect_hovered(window->position, window->dimentions) && app->mouse_button_just_pressed(mouse_button_left)) {
-			dragging = id;
-			drag_offset = v2f(app->mouse_pos.x, app->mouse_pos.y) - window->position;
-		}
 
 		if (dragging == id) {
 			window->position = v2f(app->mouse_pos.x, app->mouse_pos.y) - drag_offset;
@@ -184,6 +241,7 @@ namespace vkr {
 
 		columns(1, max_column_width());
 
+		window->beginning = cmd_begin_window();
 		cmd_draw_rect(window->position - v2f(1.0f), window->dimentions + v2f(2.0f), get_style_color(StyleColor::border));
 		cmd_draw_rect(window->position, window->dimentions, get_style_color(StyleColor::background));
 		cmd_set_clip(window->position + v2f(padding), window->dimentions - v2f(padding) * 2.0f);
@@ -195,6 +253,7 @@ namespace vkr {
 	}
 
 	void UIContext::end_window() {
+		window->beginning->end_idx = command_buffer_idx;
 		window = null;
 	}
 
@@ -247,7 +306,7 @@ namespace vkr {
 		v2f position = cursor_pos;
 		v2f dimentions = text_dim + padding * 2.0f;
 
-		auto hovered = rect_hovered(position, dimentions);
+		auto hovered = window->id == top_window && rect_hovered(position, dimentions);
 		if (hovered) {
 			hovered_item = id;
 
@@ -266,7 +325,7 @@ namespace vkr {
 			hot_item = 0;
 		}
 
-		bool hot = hot_item == id;
+		bool hot = window->id == top_window && hot_item == id;
 
 		auto color = get_style_color(StyleColor::background2);
 
@@ -282,7 +341,7 @@ namespace vkr {
 
 		advance(text_dim.y + padding * 3.0f);
 
-		return clicked;
+		return clicked && window->id == top_window;
 	}
 
 	void UIContext::columns(usize count, f32 size) {

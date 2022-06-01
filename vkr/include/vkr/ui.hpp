@@ -30,10 +30,11 @@ namespace vkr {
 
 		struct Command {
 			enum class Type : u8 {
-				draw_rect,
+				draw_rect = 0,
 				draw_text,
 				bind_font,
-				set_clip
+				set_clip,
+				begin_window
 			} type;
 
 			usize size;
@@ -58,10 +59,15 @@ namespace vkr {
 			v2f position, dimentions;
 		};
 
+		struct BeginWindowCommand : public Command {
+			usize beginning_idx, end_idx;
+		};
+
 		void cmd_draw_rect(v2f position, v2f dimentions, v4f color);
 		void cmd_draw_text(const char* text, usize len, v2f position, v2f dimentions);
 		void cmd_bind_font(Font* font, v4f color);
 		void cmd_set_clip(v2f position, v2f dimentions);
+		BeginWindowCommand* cmd_begin_window();
 
 		bool rect_outside_clip(v2f position, v2f dimentions, Rect rect);
 
@@ -71,7 +77,11 @@ namespace vkr {
 		 * buffer, which is then iterated in the `draw' function. This
 		 * means that the `begin'/`end' functions don't necessarily
 		 * have to be within a framebuffer `begin'/`end', allowing for
-		 * more flexibility in the way that the GUI code is written. */
+		 * more flexibility in the way that the GUI code is written.
+		 *
+		 * The `sorted_command_buffer' contains the commands for
+		 * windows' elements in a back-to-front order, updated in the
+		 * draw function. */
 		u8 command_buffer[1024 * 1024];
 		usize command_buffer_idx;
 
@@ -84,7 +94,14 @@ namespace vkr {
 			v2f content_offset;
 			v2f max_content_dimentions;
 			v2f content_dimentions;
+
+			f32 z;
+
+			u64 id;
+			BeginWindowCommand* beginning;
 		}* window;
+
+		std::vector<WindowMeta*> sorted_windows;
 
 		std::unordered_map<u64, WindowMeta> meta;
 
@@ -96,6 +113,7 @@ namespace vkr {
 
 		u64 hot_item;
 		u64 hovered_item;
+		u64 top_window;
 
 		u64 dragging;
 		v2f drag_offset;

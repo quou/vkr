@@ -155,16 +155,35 @@ public:
 				info("Another button pressed.");
 			}
 
+			ui->label("I'm a label that's going to be clipped off.");
+
+			ui->end_window();
+		}
+
+		if (ui->begin_window("Test Window 2", v2f(500, 100))) {
 			ui->columns(2, ui->max_column_width() / 2.0f);
 			ui->label("Label");
 			ui->button("Button");
 			ui->label("Label");
 			ui->button("Button");
+			ui->columns(3, ui->max_column_width() / 3.0f);
+			ui->label("Label");
+			ui->label("Label");
+			ui->label("Label");
+			ui->label("Label");
+			ui->label("Label");
+			ui->label("Label");
+			ui->label("Label");
+			ui->label("Label");
+			ui->label("Label");
+			ui->label("Label");
+			ui->label("Label");
+			ui->label("Label");
 
-			ui->label("I'm a label that's going to be clipped off.");
-
-			ui->end();
+			ui->end_window();
 		}
+
+		ui->end();
 
 		auto& t = monkey2.get<Transform>();
 		t.m = m4f::rotate(m4f::identity(), rot, v3f(0.0f, 1.0f, 0.0f));
