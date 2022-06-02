@@ -128,6 +128,9 @@ namespace vkr {
 		pp_config.bloom_blur_intensity = 350.0f;
 		pp_config.bloom_intensity = 0.2f;
 		sun.bias = 0.0f;
+		sun.softness = 0.2f;
+		sun.pcf_sample_count = 32;
+		sun.blocker_search_sample_count = 64;
 
 		shadow_sampler = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow | Sampler::Flags::clamp);
 		fb_sampler     = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow | Sampler::Flags::clamp);
@@ -513,8 +516,12 @@ namespace vkr {
 		f_ub.sun.direction = sun.direction;
 		f_ub.sun.intensity = sun.intensity;
 		f_ub.sun.bias = sun.bias;
+		f_ub.sun.softness = sun.softness;
 		f_ub.sun.diffuse = sun.diffuse;
 		f_ub.sun.specular = sun.specular;
+
+		f_ub.blocker_search_sample_count = sun.blocker_search_sample_count;
+		f_ub.pcf_sample_count = sun.pcf_sample_count;
 
 		scene_pip->begin();
 		scene_fb->begin();

@@ -58,6 +58,7 @@ struct PointLight {
 struct DirectionalLight {
 	float intensity;
 	float bias;
+	float softness;
 	vec3 diffuse;
 	vec3 specular;
 	vec3 direction;
@@ -72,6 +73,9 @@ layout (binding = 1) uniform FragmentData {
 	float far_plane;
 
 	float fov, aspect;
+
+	int blocker_search_sample_count;
+	int pcf_sample_count;
 
 	DirectionalLight sun;
 
@@ -133,13 +137,11 @@ vec3 compute_point_light(vec3 normal, vec3 view_dir, PointLight light) {
 
 /* Find the average depth of the light blockers. */
 float blocker_dist(vec3 coords, float size, float bias) {
-	const int sample_count = 64;
-
 	int blocker_count = 0;
 	float r = 0.0;
 	float width = size * (coords.z - data.near_plane) / data.camera_pos.z;
 
-	for (int i = 0; i < sample_count; i++) {
+	for (int i = 0; i < data.blocker_search_sample_count; i++) {
 		float z = texture(blockermap, coords.xy + poisson_disk[i] * width).r;
 		if (z < coords.z + bias) {
 			blocker_count++;
@@ -155,16 +157,14 @@ float blocker_dist(vec3 coords, float size, float bias) {
 }
 
 float pcf(vec3 coords, float radius, float bias) {
-	const int sample_count = 64;
-
 	float r = 0.0;
 
-	for (int i = 0; i < sample_count; i++) {
+	for (int i = 0; i < data.pcf_sample_count; i++) {
 		float z = texture(shadowmap, vec3(coords.xy + poisson_disk[i] * radius, coords.z + bias)).r;
 		r += (z < coords.z) ? 1.0 : 0.0;
 	}
 
-	return r / sample_count;
+	return r / data.pcf_sample_count;
 }
 
 vec3 compute_directional_light(vec3 normal, vec3 view_dir, DirectionalLight light) {
@@ -183,7 +183,7 @@ vec3 compute_directional_light(vec3 normal, vec3 view_dir, DirectionalLight ligh
 		push_data.material.specular * 
 		pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
 
-	const float light_size = 0.2;
+	float light_size = light.softness;
 
 	/* Shadow calculation. */
 	vec3 coords = fs_in.sun_pos.xyz / fs_in.sun_pos.w;

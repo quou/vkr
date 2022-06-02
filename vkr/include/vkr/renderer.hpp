@@ -74,6 +74,7 @@ namespace vkr {
 		struct impl_DirectionalLight {
 			alignas(4)  f32 intensity;
 			alignas(4)  f32 bias;
+			alignas(4)  f32 softness;
 			alignas(16) v3f diffuse;
 			alignas(16) v3f specular;
 			alignas(16) v3f direction;
@@ -101,6 +102,9 @@ namespace vkr {
 
 			alignas(4) f32 fov;
 			alignas(4) f32 aspect;
+
+			alignas(4) i32 blocker_search_sample_count;
+			alignas(4) i32 pcf_sample_count;
 
 			impl_DirectionalLight sun;
 
@@ -157,8 +161,12 @@ namespace vkr {
 			v3f direction;
 			f32 intensity;
 			f32 bias;
+			f32 softness;
 			v3f specular;
 			v3f diffuse;
+
+			int blocker_search_sample_count;
+			int pcf_sample_count;
 		} sun;
 
 		/* Post processing config. */

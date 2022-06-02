@@ -196,10 +196,32 @@ public:
 			ui->label("Sun");
 			ui->use_font(dejavusans);
 
-			ui->columns(3, 0.30, 0.5, 0.20);
+			ui->columns(4, 0.3, 0.23, 0.23, 0.23);
+			ui->label("Direction");
+			ui->slider(&renderer->sun.direction.x, -1.0f, 1.0f);
+			ui->slider(&renderer->sun.direction.y, -1.0f, 1.0f);
+			ui->slider(&renderer->sun.direction.z, -1.0f, 1.0f);
+
+			ui->columns(3, 0.3, 0.5, 0.2);
 			ui->label("Shadow Bias");
 			ui->slider(&renderer->sun.bias, -0.1f, 0.1f);
 			ui->text("%.2f", renderer->sun.bias);
+
+			ui->label("Shadow Softness");
+			ui->slider(&renderer->sun.softness, 0.0f, 1.0f);
+			ui->text("%.2f", renderer->sun.softness);
+
+			ui->label("Blocker Samples");
+			static f32 new_blocker_search_sample_count = 32;
+			ui->slider(&new_blocker_search_sample_count, 0.0f, 128.0f);
+			ui->text("%d", renderer->sun.blocker_search_sample_count);
+			renderer->sun.blocker_search_sample_count = static_cast<i32>(new_blocker_search_sample_count);
+
+			ui->label("PCF Samples");
+			static f32 new_pcf_sample_count = 16;
+			ui->slider(&new_pcf_sample_count, 0.0f, 128.0f);
+			ui->text("%d", renderer->sun.pcf_sample_count);
+			renderer->sun.pcf_sample_count = static_cast<i32>(new_pcf_sample_count);
 
 			ui->linebreak();
 
