@@ -44,6 +44,33 @@ for line in io.lines(arg[1]) do
 		goto continue
 	end
 
+	if string.sub(line, 1, 10) == "#include \"" then
+		local inc_str = string.sub(line, 11, -2);
+		inc_str = string.gsub(arg[1], "(.*)/.*$","%1") .. "/" .. inc_str
+
+		if adding_to == "vertex" then
+			vertex = vertex .. "#line 1 \"" .. inc_str .. "\"\n"
+		elseif adding_to == "fragment" then
+			fragment = fragment .. "#line 1 \"" .. inc_str .. "\"\n"
+		end
+
+		for line2 in io.lines(inc_str) do
+			if adding_to == "vertex" then
+				vertex = vertex .. line2 .. "\n"
+			elseif adding_to == "fragment" then
+				fragment = fragment .. line2 .. "\n"
+			end
+		end
+
+		if adding_to == "vertex" then
+			vertex = vertex .. "#line " .. tostring(line_number + 1) .. " \"" .. arg[1] .. "\"\n"
+		elseif adding_to == "fragment" then
+			fragment = fragment .. "#line " .. tostring(line_number + 1) .. " \"" .. arg[1] .. "\"\n"
+		end
+
+		goto continue
+	end
+
 	if string.sub(line, 1, 4) == "#end" then
 		adding_to = nil
 		goto continue

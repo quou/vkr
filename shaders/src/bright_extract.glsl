@@ -19,18 +19,8 @@ void main() {
 
 #begin FRAGMENT
 
-layout (location = 0) out vec4 color;
-
-layout (location = 0) in VertexOut {
-	vec2 uv;
-} fs_in;
-
-layout (binding = 0) uniform Config {
-	float bloom_threshold;
-	float bloom_blur_intensity;
-	float bloom_intensity;
-	vec2 screen_size;
-} config;
+#include "pp_common.glsl"
+#include "pp_config.glsl"
 
 layout (set = 1, binding = 0) uniform sampler2D input_texture;
 

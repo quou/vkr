@@ -340,6 +340,26 @@ namespace vkr {
 
 		blur_h = new PostProcessStep(this, shaders.blur_h, blur_h_deps, 1);
 
+		PostProcessStep::Dependency blur_v2_deps[] = {
+			{
+				.name = "color",
+				.framebuffer = blur_h->get_framebuffer(),
+				.attachment = 0
+			}
+		};
+
+		blur_v2 = new PostProcessStep(this, shaders.blur_v, blur_v2_deps, 1);
+
+		PostProcessStep::Dependency blur_h2_deps[] = {
+			{
+				.name = "color",
+				.framebuffer = blur_v2->get_framebuffer(),
+				.attachment = 0
+			}
+		};
+
+		blur_h2 = new PostProcessStep(this, shaders.blur_h, blur_h2_deps, 1);
+
 		PostProcessStep::Dependency tonemap_deps[] = {
 			{
 				.name = "color",
@@ -358,7 +378,7 @@ namespace vkr {
 			},
 			{
 				.name = "bloom",
-				.framebuffer = blur_h->get_framebuffer(),
+				.framebuffer = blur_h2->get_framebuffer(),
 				.attachment = 0
 			}
 		};
@@ -385,6 +405,8 @@ namespace vkr {
 		delete bright_extract;
 		delete blur_v;
 		delete blur_h;
+		delete blur_v2;
+		delete blur_h2;
 		delete scene_pip;
 
 		delete[] materials;
@@ -539,6 +561,8 @@ namespace vkr {
 		bright_extract->execute();
 		blur_v->execute();
 		blur_h->execute();
+		blur_v2->execute();
+		blur_h2->execute();
 	}
 
 	void Renderer3D::draw_to_default_framebuffer() {

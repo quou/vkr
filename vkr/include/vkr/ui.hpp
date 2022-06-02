@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <functional>
 
 #include "common.hpp"
 #include "maths.hpp"
@@ -13,6 +14,7 @@ namespace vkr {
 	public:
 		enum class StyleVar : u32 {
 			padding = 0,
+			border_width,
 			count
 		};
 
@@ -98,7 +100,11 @@ namespace vkr {
 
 			f32 z;
 
+			v2f border_positions[4];
+			v2f border_dimentions[4];
+
 			u64 id;
+			bool is_top;
 			BeginWindowCommand* beginning;
 		}* window;
 
@@ -115,7 +121,6 @@ namespace vkr {
 
 		u64 hot_item;
 		u64 hovered_item;
-		u64 top_window;
 
 		u64 dragging;
 		v2f drag_offset;
@@ -181,5 +186,6 @@ namespace vkr {
 		}
 
 		bool rect_hovered(v2f position, v2f dimentions);
+		bool rect_overlap(v2f ap, v2f ad, v2f bp, v2f bd);
 	};
 }

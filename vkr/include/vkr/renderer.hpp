@@ -134,6 +134,8 @@ namespace vkr {
 		PostProcessStep* bright_extract;
 		PostProcessStep* blur_v;
 		PostProcessStep* blur_h;
+		PostProcessStep* blur_v2;
+		PostProcessStep* blur_h2;
 		PostProcessStep* tonemap;
 		PostProcessStep* composite;
 

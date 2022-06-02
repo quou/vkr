@@ -12,6 +12,10 @@ namespace vkr {
 		return fmp > position && fmp < position + dimentions;
 	}
 
+	bool UIContext::rect_overlap(v2f ap, v2f ad, v2f bp, v2f bd) {
+		return ap > bp && ap < bp + bd;
+	}
+
 	void UIContext::cmd_draw_rect(v2f position, v2f dimentions, v4f color) {
 		DrawRectCommand* cmd = reinterpret_cast<DrawRectCommand*>(command_buffer + command_buffer_idx);
 		cmd->type = Command::Type::draw_rect;
@@ -77,15 +81,16 @@ namespace vkr {
 	}
 
 	UIContext::UIContext(App* app) : app(app), dragging(0), anything_hovered(false), anything_hot(false),
-		hot_item(0), hovered_item(0), top_window(0) {
-		set_style_var(StyleVar::padding, 3.0f);
+		hot_item(0), hovered_item(0) {
+		set_style_var(StyleVar::padding,      3.0f);
+		set_style_var(StyleVar::border_width, 1.0f);
 
 		set_style_color(StyleColor::background,  make_color(0x1a1a1a, 200));
 		set_style_color(StyleColor::background2, make_color(0x292929, 255));
 		set_style_color(StyleColor::background3, make_color(0x2d2d2d, 255));
 		set_style_color(StyleColor::hovered,     make_color(0x242543, 255));
 		set_style_color(StyleColor::hot,         make_color(0x393d5b, 255));
-		set_style_color(StyleColor::border,      make_color(0x0f0f0f, 255));
+		set_style_color(StyleColor::border,      make_color(0x0f0f0f, 200));
 	}
 
 	UIContext::~UIContext() {
@@ -116,6 +121,7 @@ namespace vkr {
 
 		if (app->mouse_button_just_released(mouse_button_left)) {
 			hot_item = 0;
+			dragging = 0;
 		}
 
 		/* Bring the top-most clicked window to the top and initiate a drag. */
@@ -126,14 +132,24 @@ namespace vkr {
 				});
 
 			for (auto win : sorted_windows) {
+				win->is_top = false;
+			}
+
+			for (auto win : sorted_windows) {
+				bool bring_to_top = false;
+
 				if (rect_hovered(win->position, win->dimentions)) {
-					win->z = 0.0f;
-					top_window = win->id;
+					bring_to_top = true;
 
 					if (!dragging && !anything_hovered && !anything_hot) {
 						dragging = win->id;
 						drag_offset = v2f(app->mouse_pos.x, app->mouse_pos.y) - win->position;
 					}
+				}
+
+				if (bring_to_top) {
+					win->z = 0.0f;
+					win->is_top = true;
 
 					for (auto& m : meta) { if (&m.second != win) { m.second.z += 1.0f; } }
 
@@ -160,13 +176,15 @@ namespace vkr {
 						renderer->set_clip(current_clip); \
 					}
 
+		auto border_width = get_style_var(StyleVar::border_width);
+
 		for (const auto& win : sorted_windows) {
 			Command* cmd = reinterpret_cast<Command*>(command_buffer + win->beginning->beginning_idx);
 			Command* end = reinterpret_cast<Command*>(command_buffer + win->beginning->end_idx);
 
 			Rect current_clip = {
-				static_cast<i32>(win->position.x - 1.0f), static_cast<i32>(win->position.y - 1.0f),
-				static_cast<i32>(win->dimentions.x + 2.0f), static_cast<i32>(win->dimentions.y + 2.0f)
+				static_cast<i32>(win->position.x - border_width), static_cast<i32>(win->position.y - border_width),
+				static_cast<i32>(win->dimentions.x + border_width * 2.0f), static_cast<i32>(win->dimentions.y + border_width * 2.0f)
 			};
 			renderer->set_clip(current_clip);
 
@@ -234,14 +252,20 @@ namespace vkr {
 
 		window = &meta[id];
 
+		auto border_width = get_style_var(StyleVar::border_width);
+		window->border_positions[0]  = v2f(window->position.x - border_width, window->position.y - border_width);
+		window->border_dimentions[0] = v2f(window->dimentions.x + border_width * 2.0f, border_width);
+		window->border_positions[1]  = v2f(window->position.x - border_width, window->position.y + window->dimentions.y);
+		window->border_dimentions[1] = v2f(window->dimentions.x + border_width * 2.0f, border_width);
+		window->border_positions[2]  = v2f(window->position.x - border_width, window->position.y);
+		window->border_dimentions[2] = v2f(border_width, window->dimentions.y);
+		window->border_positions[3]  = v2f(window->position.x + window->dimentions.x, window->position.y);
+		window->border_dimentions[3] = v2f(border_width, window->dimentions.y);
+
 		cursor_pos = window->position + window->content_offset;
 
 		if (dragging == id) {
 			window->position = v2f(app->mouse_pos.x, app->mouse_pos.y) - drag_offset;
-
-			if (app->mouse_button_just_released(mouse_button_left)) {
-				dragging = 0;
-			}
 		}
 
 		columns(1, 1.0f);
@@ -249,12 +273,9 @@ namespace vkr {
 		window->beginning = cmd_begin_window();
 
 		/* Draw the border. */
-		cmd_draw_rect(window->position, v2f(window->dimentions.x, 1.0f), get_style_color(StyleColor::border));
-		cmd_draw_rect(window->position, v2f(1.0f, window->dimentions.y), get_style_color(StyleColor::border));
-		cmd_draw_rect(v2f(window->position.x, window->position.y + window->dimentions.y),
-			v2f(window->dimentions.x + 1, 1.0f), get_style_color(StyleColor::border));
-		cmd_draw_rect(v2f(window->position.x + window->dimentions.x, window->position.y),
-			v2f(1.0f, window->dimentions.y), get_style_color(StyleColor::border));
+		for (usize i = 0; i < 4; i++) {
+			cmd_draw_rect(window->border_positions[i], window->border_dimentions[i], get_style_color(StyleColor::border));
+		}
 
 		cmd_draw_rect(window->position, window->dimentions, get_style_color(StyleColor::background));
 		cmd_set_clip(window->position + v2f(padding), window->dimentions - v2f(padding) * 2.0f);
@@ -319,7 +340,7 @@ namespace vkr {
 		v2f position = cursor_pos;
 		v2f dimentions = text_dim + padding * 2.0f;
 
-		auto hovered = window->id == top_window && rect_hovered(position, dimentions);
+		auto hovered = window->is_top && rect_hovered(position, dimentions);
 		if (hovered) {
 			hovered_item = id;
 
@@ -338,7 +359,7 @@ namespace vkr {
 			hot_item = 0;
 		}
 
-		bool hot = window->id == top_window && hot_item == id;
+		bool hot = window->is_top && hot_item == id;
 
 		auto color = get_style_color(StyleColor::background2);
 
@@ -354,7 +375,7 @@ namespace vkr {
 
 		advance(text_dim.y + padding * 3.0f);
 
-		return clicked && window->id == top_window;
+		return clicked && window->is_top;
 	}
 
 	void UIContext::slider(f64* val, f64 min, f64 max) {
@@ -376,7 +397,7 @@ namespace vkr {
 
 		auto handle_color = get_style_color(StyleColor::background2);
 
-		if (top_window == window->id && rect_hovered(handle_pos, handle_dim)) {
+		if (window->is_top && rect_hovered(handle_pos, handle_dim)) {
 			if (app->mouse_button_just_pressed(mouse_button_left)) {
 				hot_item = id;
 			}
