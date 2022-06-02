@@ -129,8 +129,8 @@ namespace vkr {
 		pp_config.bloom_intensity = 0.2f;
 		sun.bias = 0.0f;
 		sun.softness = 0.2f;
-		sun.pcf_sample_count = 32;
-		sun.blocker_search_sample_count = 64;
+		sun.pcf_sample_count = 64;
+		sun.blocker_search_sample_count = 20;
 
 		shadow_sampler = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow | Sampler::Flags::clamp);
 		fb_sampler     = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow | Sampler::Flags::clamp);
