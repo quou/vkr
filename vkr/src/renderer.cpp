@@ -127,6 +127,7 @@ namespace vkr {
 		pp_config.bloom_threshold = 2.0f;
 		pp_config.bloom_blur_intensity = 350.0f;
 		pp_config.bloom_intensity = 0.2f;
+		sun.bias = 0.0f;
 
 		shadow_sampler = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow | Sampler::Flags::clamp);
 		fb_sampler     = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow | Sampler::Flags::clamp);
@@ -862,6 +863,10 @@ namespace vkr {
 		width = std::max(width, x);
 
 		return v2f(width, y);
+	}
+
+	f32 Font::height() {
+		return handle->height;
 	}
 
 	Font::~Font() {

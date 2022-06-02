@@ -149,7 +149,8 @@ namespace vkr {
 		void label(const char* text);
 		void text(const char* fmt, ...);
 		bool button(const char* text);
-		void slider(f64* val, f64 min = 0.0, f64 max = 1.0);
+		void linebreak();
+		void slider(f32* val, f32 min = 0.0, f32 max = 1.0);
 
 		u64 next_item_id();
 

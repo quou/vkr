@@ -378,7 +378,7 @@ namespace vkr {
 		return clicked && window->is_top;
 	}
 
-	void UIContext::slider(f64* val, f64 min, f64 max) {
+	void UIContext::slider(f32* val, f32 min, f32 max) {
 		auto id = next_item_id();
 
 		const f32 track_height = 3.0f;
@@ -418,6 +418,10 @@ namespace vkr {
 		cmd_draw_rect(handle_pos, handle_dim, handle_color);
 
 		advance(con_dim.y + padding);
+	}
+
+	void UIContext::linebreak() {
+		cursor_pos.y += bound_font->height();
 	}
 
 	void UIContext::columns(usize count, ...) {

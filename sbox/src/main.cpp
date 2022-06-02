@@ -29,7 +29,7 @@ private:
 	Texture* wall_n;
 	Texture* wood_a;
 
-	Font* dejavusans;
+	Font* dejavusans, * dejavusans_bold;
 
 	UIContext* ui;
 
@@ -70,7 +70,8 @@ public:
 			"res/shaders/2d.vert.spv",
 			"res/shaders/2d.frag.spv");
 
-		dejavusans = new Font("res/fonts/DejaVuSans.ttf", 14.0f);
+		dejavusans      = new Font("res/fonts/DejaVuSans.ttf",      14.0f);
+		dejavusans_bold = new Font("res/fonts/DejaVuSans-Bold.ttf", 14.0f);
 
 		test_sprite = Bitmap::from_file("res/sprites/test.png");
 		test_sprite2 = Bitmap::from_file("res/sprites/test2.png");
@@ -178,7 +179,7 @@ public:
 		ui->begin(get_size());
 		ui->use_font(dejavusans);
 
-		if (ui->begin_window("Debug")) {
+		if (ui->begin_window("Debug", v2f(10.0f))) {
 			if (fps_update <= 0.0) {
 				fps = 1.0 / ts;
 				fps_update = 1.0;
@@ -186,39 +187,44 @@ public:
 
 			fps_update -= ts;
 
+			ui->use_font(dejavusans);
 			ui->text("FPS: %g", fps);
+			ui->linebreak();
+
+			ui->columns(1, 1.0);
+			ui->use_font(dejavusans_bold);
+			ui->label("Sun");
+			ui->use_font(dejavusans);
 
 			ui->columns(3, 0.30, 0.5, 0.20);
-
 			ui->label("Shadow Bias");
-			static f64 new_bias = 0.0;
-			ui->slider(&new_bias, -0.1, 0.1);
-			ui->text("%.2f", new_bias);
+			ui->slider(&renderer->sun.bias, -0.1f, 0.1f);
+			ui->text("%.2f", renderer->sun.bias);
 
-			ui->label("Bloom Threshold");
-			static f64 new_bloom_threshold = renderer->pp_config.bloom_threshold;
-			ui->slider(&new_bloom_threshold, 0.0, 10.0);
-			ui->text("%.2f", new_bloom_threshold);
+			ui->linebreak();
 
-			ui->label("Bloom Blur Intensity");
-			static f64 new_bloom_blur_int = renderer->pp_config.bloom_blur_intensity;
-			ui->slider(&new_bloom_blur_int, 0.0, 1000.0);
-			ui->text("%.2f", new_bloom_blur_int);
+			ui->use_font(dejavusans_bold);
+			ui->columns(1, 1.0);
+			ui->label("Bloom");
+			ui->use_font(dejavusans);
 
-			ui->label("Bloom Intensity");
-			static f64 new_bloom_int = renderer->pp_config.bloom_intensity;
-			ui->slider(&new_bloom_int , 0.0, 1.0);
-			ui->text("%.2f", new_bloom_int);
+			ui->columns(3, 0.30, 0.5, 0.20);
+			ui->label("Threshold");
+			ui->slider(&renderer->pp_config.bloom_threshold, 0.0f, 10.0f);
+			ui->text("%.2f", renderer->pp_config.bloom_threshold);
 
-			renderer->sun.bias = static_cast<f32>(new_bias);
-			renderer->pp_config.bloom_threshold = static_cast<f32>(new_bloom_threshold);
-			renderer->pp_config.bloom_blur_intensity = static_cast<f32>(new_bloom_blur_int);
-			renderer->pp_config.bloom_intensity = static_cast<f32>(new_bloom_int);
+			ui->label("Blur Intensity");
+			ui->slider(&renderer->pp_config.bloom_blur_intensity, 0.0f, 1000.0f);
+			ui->text("%.2f", renderer->pp_config.bloom_blur_intensity);
+
+			ui->label("Intensity");
+			ui->slider(&renderer->pp_config.bloom_intensity , 0.0f, 1.0f);
+			ui->text("%.2f", renderer->pp_config.bloom_intensity);
 
 			ui->end_window();
 		}
 
-		if (ui->begin_window("Test Window", v2f(500, 100))) {
+		if (ui->begin_window("Test Window", v2f(10.0f, 320.0f))) {
 			ui->columns(2, 0.5f, 0.5f);
 			ui->label("Label");
 			ui->button("Button");
@@ -283,6 +289,7 @@ public:
 		delete renderer2d;
 		delete sprite_shader;
 		delete dejavusans;
+		delete dejavusans_bold;
 		test_sprite->free();
 		test_sprite2->free();
 	}

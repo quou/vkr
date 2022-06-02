@@ -253,6 +253,7 @@ namespace vkr {
 		~Font();
 
 		v2f dimentions(const char* text);
+		f32 height();
 	};
 
 	class VKR_API Renderer2D {
