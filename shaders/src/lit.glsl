@@ -142,7 +142,7 @@ float blocker_dist(vec3 coords, float size, float bias) {
 	float width = size * (coords.z - data.near_plane) / data.camera_pos.z;
 
 	for (int i = 0; i < data.blocker_search_sample_count; i++) {
-		float z = texture(blockermap, coords.xy + poisson_disk[i] * width).r;
+		float z = texture(blockermap, coords.xy + poisson_disk[i % 64] * width).r;
 		if (z < coords.z + bias) {
 			blocker_count++;
 			r += z;
@@ -150,7 +150,7 @@ float blocker_dist(vec3 coords, float size, float bias) {
 	}
 
 	if (blocker_count > 0) {
-		return r / blocker_count;
+		return r / float(blocker_count);
 	} else {
 		return -1.0;
 	}
@@ -160,11 +160,18 @@ float pcf(vec3 coords, float radius, float bias) {
 	float r = 0.0;
 
 	for (int i = 0; i < data.pcf_sample_count; i++) {
-		float z = texture(shadowmap, vec3(coords.xy + poisson_disk[i] * radius, coords.z + bias)).r;
+		vec2 rotation = vec2(random(coords.xyz, i), random(coords.xyz, i + data.pcf_sample_count));
+
+		vec2 p_offset = vec2(
+			rotation.x * poisson_disk[i].x - rotation.y * poisson_disk[i].y,
+			rotation.y * poisson_disk[i].x + rotation.x * poisson_disk[i].y
+		);
+
+		float z = texture(shadowmap, vec3(coords.xy + p_offset * radius, coords.z + bias)).r;
 		r += (z < coords.z) ? 1.0 : 0.0;
 	}
 
-	return r / data.pcf_sample_count;
+	return r / float(data.pcf_sample_count);
 }
 
 vec3 compute_directional_light(vec3 normal, vec3 view_dir, DirectionalLight light) {
