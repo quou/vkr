@@ -3,7 +3,11 @@
 #include <vkr/vkr.hpp>
 #include <ecs/ecs.hpp>
 
+#define camera_speed 3.0f
+
 using namespace vkr;
+
+void update_camera(App* app, ecs::Entity cam_ent);
 
 class SandboxApp : public vkr::App {
 private:
@@ -35,14 +39,24 @@ private:
 
 	ecs::World world;
 
+	ecs::Entity camera;
+
 	ecs::Entity monkey1, monkey2;
 	ecs::Entity ground, monolith;
 
 	ecs::Entity red_light, blue_light;
+
+	v2i old_mouse;
+	bool first_move;
+	bool camera_active;
 public:
 	SandboxApp() : App("Sandbox", vkr::v2i(1920, 1080)) {}
 
 	void on_init() override {
+		lock_mouse();
+		first_move = true;
+		camera_active = true;
+
 		ui = new UIContext(this);
 
 		shaders.lit = Shader::from_file(video,
@@ -131,6 +145,16 @@ public:
 
 		renderer = new Renderer3D(this, video, shaders, materials, 4);
 
+		camera = world.new_entity();
+		camera.add(Camera {
+			.position = { 0.0f, 0.0f, 0.0f },
+			.rotation = { 0.0f, 180.0f, 0.0f },
+			.active = true,
+			.fov = 70.0f,
+			.near = 0.1f,
+			.far = 100.0f
+		});
+
 		red_light = world.new_entity();
 		red_light.add(Transform { m4f::translate(m4f::identity(), v3f(-2.5f, 0.0f, 0.0f)) });
 		red_light.add(PointLight {
@@ -188,6 +212,9 @@ public:
 			fps_update -= ts;
 
 			ui->use_font(dejavusans);
+
+			ui->text("Press <Esc> to unlock the mouse.");
+
 			ui->text("FPS: %g", fps);
 			ui->linebreak();
 
@@ -271,13 +298,73 @@ public:
 
 		ui->end();
 
+		/* Update the camera. */
+		if (camera_active) {
+			Camera& cam = camera.get<Camera>();
+
+			i32 change_x = mouse_pos.x - old_mouse.x;
+			i32 change_y = old_mouse.y - mouse_pos.y;
+
+			if (first_move) {
+				old_mouse = mouse_pos;
+				change_x = change_y = 0;
+				first_move = false;
+			}
+
+			old_mouse = mouse_pos;
+
+			cam.rotation.y -= (f32)change_x * 0.1f;
+			cam.rotation.x += (f32)change_y * 0.1f;
+
+			if (cam.rotation.x >= 89.0f) {
+				cam.rotation.x = 89.0f;
+			}
+
+			if (cam.rotation.x <= -89.0f) {
+				cam.rotation.x = -89.0f;
+			}
+
+			v3f cam_dir = v3f(
+				cosf(to_rad(cam.rotation.x)) * sinf(to_rad(cam.rotation.y)),
+				sinf(to_rad(cam.rotation.x)),
+				cosf(to_rad(cam.rotation.x)) * cosf(to_rad(cam.rotation.y))
+			);
+
+			if (key_pressed(key_S)) {
+				cam.position -= cam_dir * camera_speed * (f32)ts;
+			}
+
+			if (key_pressed(key_W)) {
+				cam.position += cam_dir * camera_speed * (f32)ts;
+			}
+
+			if (key_pressed(key_D)) {
+				cam.position += v3f::cross(cam_dir, v3f(0.0f, 1.0f, 0.0f)) * camera_speed * (f32)ts;
+			}
+
+			if (key_pressed(key_A)) {
+				cam.position -= v3f::cross(cam_dir, v3f(0.0f, 1.0f, 0.0f)) * camera_speed * (f32)ts;
+			}
+		}
+
+		if (key_just_pressed(key_escape)) {
+			unlock_mouse();
+			camera_active = false;
+		}
+
+		if (!camera_active && mouse_button_just_pressed(mouse_button_left) && !ui->any_windows_hovered()) {
+			first_move = true;
+			camera_active = true;
+			lock_mouse();
+		}
+
 		auto& t = monkey2.get<Transform>();
 		t.m = m4f::rotate(m4f::identity(), rot, v3f(0.0f, 1.0f, 0.0f));
 
 		auto& lt = blue_light.get<Transform>();
 		lt.m = m4f::translate(m4f::identity(), v3f((f32)cos(time * 2.0f), -1.0f, (f32)sin(time * 2.0f)));
 
-		renderer->draw(&world);
+		renderer->draw(&world, camera);
 
 		get_default_framebuffer()->begin();
 

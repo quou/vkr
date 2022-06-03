@@ -208,6 +208,14 @@ namespace vkr {
 		delete handle;
 	}
 
+	void App::lock_mouse() {
+		glfwSetInputMode(handle->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	}
+
+	void App::unlock_mouse() {
+		glfwSetInputMode(handle->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	}
+
 	bool App::create_window_surface(const VideoContext& ctx) const {
 		return glfwCreateWindowSurface(ctx.handle->instance, handle->window, null, &ctx.handle->surface) == VK_SUCCESS;
 	}

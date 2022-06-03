@@ -161,6 +161,9 @@ namespace vkr {
 		v2i get_size() const;
 		Framebuffer* get_default_framebuffer() const;
 
+		void lock_mouse();
+		void unlock_mouse();
+
 		bool held_keys    [static_cast<i32>(key_count)];
 		bool pressed_keys [static_cast<i32>(key_count)];
 		bool released_keys[static_cast<i32>(key_count)];

@@ -188,5 +188,7 @@ namespace vkr {
 
 		bool rect_hovered(v2f position, v2f dimentions);
 		bool rect_overlap(v2f ap, v2f ad, v2f bp, v2f bd);
+
+		bool any_windows_hovered();
 	};
 }

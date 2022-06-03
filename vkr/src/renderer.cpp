@@ -418,10 +418,8 @@ namespace vkr {
 		delete default_texture;
 	}
 
-	void Renderer3D::draw(ecs::World* world) {
+	void Renderer3D::draw(ecs::World* world, ecs::Entity camera_ent) {
 		auto size = app->get_size();
-
-		v3f camera_pos(0.0f, 0.0f, -5.0f);
 
 		AABB scene_aabb = {
 			.min = { INFINITY, INFINITY, INFINITY },
@@ -491,14 +489,22 @@ namespace vkr {
 		shadow_pip->end();
 		shadow_fb->end();
 
-		v_ub.projection = m4f::pers(70.0f, (f32)size.x / (f32)size.y, 0.1f, 100.0f);
-		v_ub.view = m4f::translate(m4f::identity(), camera_pos);
+		const auto& camera = camera_ent.get<Camera>();
 
-		f_ub.camera_pos = camera_pos;
-		f_ub.near_plane = 0.1f;
-		f_ub.far_plane = 100.0f;
+		v3f cam_dir = v3f(
+			cosf(to_rad(camera.rotation.x)) * sinf(to_rad(camera.rotation.y)),
+			sinf(to_rad(camera.rotation.x)),
+			cosf(to_rad(camera.rotation.x)) * cosf(to_rad(camera.rotation.y))
+		);
+
+		v_ub.projection = m4f::pers(camera.fov, (f32)size.x / (f32)size.y, camera.near, camera.far);
+		v_ub.view = m4f::lookat(camera.position, camera.position + cam_dir, v3f(0.0f, 1.0f, 0.0f));
+
+		f_ub.camera_pos = camera.position;
+		f_ub.near_plane = camera.near;
+		f_ub.far_plane = camera.far;
 		f_ub.aspect = (f32)size.x / (f32)size.y;
-		f_ub.fov = to_rad(70.0f);
+		f_ub.fov = to_rad(camera.fov);
 
 		f_ub.point_light_count = 0;
 		for (ecs::View view = world->new_view<Transform, PointLight>(); view.valid(); view.next()) {

@@ -160,14 +160,7 @@ float pcf(vec3 coords, float radius, float bias) {
 	float r = 0.0;
 
 	for (int i = 0; i < data.pcf_sample_count; i++) {
-		vec2 rotation = vec2(random(coords.xyz, i), random(coords.xyz, i + data.pcf_sample_count));
-
-		vec2 p_offset = vec2(
-			rotation.x * poisson_disk[i].x - rotation.y * poisson_disk[i].y,
-			rotation.y * poisson_disk[i].x + rotation.x * poisson_disk[i].y
-		);
-
-		float z = texture(shadowmap, vec3(coords.xy + p_offset * radius, coords.z + bias)).r;
+		float z = texture(shadowmap, vec3(coords.xy + radius * poisson_disk[i], coords.z + bias)).r;
 		r += (z < coords.z) ? 1.0 : 0.0;
 	}
 

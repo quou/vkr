@@ -457,4 +457,14 @@ namespace vkr {
 			column = 0;
 		}
 	}
+
+	bool UIContext::any_windows_hovered() {
+		for (auto& m : meta) {
+			if (rect_hovered(m.second.position, m.second.dimentions)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
 }

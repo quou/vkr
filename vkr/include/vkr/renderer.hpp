@@ -179,7 +179,7 @@ namespace vkr {
 		Renderer3D(App* app, VideoContext* video, const ShaderConfig& shaders, Material* materials, usize material_count);
 		~Renderer3D();
 
-		void draw(ecs::World* world);
+		void draw(ecs::World* world, ecs::Entity camera_ent);
 		void draw_to_default_framebuffer();
 
 		struct Vertex {
@@ -235,6 +235,17 @@ namespace vkr {
 
 	struct Rect {
 		i32 x, y, w, h;
+	};
+
+	struct Camera {
+		v3f position;
+		v3f rotation;
+
+		bool active;
+
+		f32 fov;
+		f32 near;
+		f32 far;
 	};
 
 	/* An RGBA CPU texture. */
