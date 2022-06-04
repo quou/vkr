@@ -112,7 +112,7 @@ layout (set = 0, binding = 3) uniform sampler2DShadow shadowmap;
 
 vec3 compute_point_light(vec3 normal, vec3 view_dir, PointLight light) {
 	vec3 light_dir = normalize(light.position - fs_in.world_pos);
-	vec3 reflect_dir = reflect(light_dir, normal);
+	vec3 reflect_dir = reflect(-light_dir, normal);
 
 	float dist = length(light.position - fs_in.world_pos);
 
@@ -139,11 +139,14 @@ vec3 compute_point_light(vec3 normal, vec3 view_dir, PointLight light) {
 float blocker_dist(vec3 coords, float size, float bias) {
 	int blocker_count = 0;
 	float r = 0.0;
-	float width = size * (coords.z - data.near_plane) / data.camera_pos.z;
+	/*                                                  max avoids a divide-by-zero. */
+	float width = size * (coords.z - data.near_plane) / max(1.0f, data.camera_pos.z);
 
 	for (int i = 0; i < data.blocker_search_sample_count; i++) {
-		float z = texture(blockermap, coords.xy + poisson_disk[i % 64] * width).r;
-		if (z < coords.z + bias) {
+		int index = int(64.0 * random(floor(fs_in.world_pos.xyz * 1000.0), i)) % 64;
+
+		float z = texture(blockermap, coords.xy + poisson_disk[index] * width).r;
+		if (z < coords.z - bias) {
 			blocker_count++;
 			r += z;
 		}
@@ -160,8 +163,9 @@ float pcf(vec3 coords, float radius, float bias) {
 	float r = 0.0;
 
 	for (int i = 0; i < data.pcf_sample_count; i++) {
-		float z = texture(shadowmap, vec3(coords.xy + radius * poisson_disk[i], coords.z + bias)).r;
-		r += (z < coords.z) ? 1.0 : 0.0;
+		int index = int(64.0 * random(floor(fs_in.world_pos.xyz * 1000.0), i)) % 64;
+
+		r += texture(shadowmap, vec3(coords.xy + radius * poisson_disk[index], coords.z - bias));
 	}
 
 	return r / float(data.pcf_sample_count);
@@ -169,7 +173,7 @@ float pcf(vec3 coords, float radius, float bias) {
 
 vec3 compute_directional_light(vec3 normal, vec3 view_dir, DirectionalLight light) {
 	vec3 light_dir = normalize(light.direction);
-	vec3 reflect_dir = reflect(light_dir, normal);
+	vec3 reflect_dir = reflect(-light_dir, normal);
 
 	vec3 diffuse =
 		light.diffuse *
@@ -202,9 +206,14 @@ vec3 compute_directional_light(vec3 normal, vec3 view_dir, DirectionalLight ligh
 	float texel_size = 1.0 / textureSize(shadowmap, 0).x;
 
 	float pcf_radius = penumbra * light_size * data.near_plane / coords.z;
+//	float pcf_radius = 0.01f;
 	float shadow = pcf(coords, pcf_radius, data.sun.bias);
 
-	return (1.0 - shadow) * (diffuse + specular);
+//	float shadow = texture(shadowmap, vec3(coords.xy, coords.z - data.sun.bias));
+
+	//shadow = blocker;
+
+	return (shadow) * (diffuse + specular);
 }
 
 void main() {

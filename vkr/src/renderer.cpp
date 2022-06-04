@@ -132,8 +132,8 @@ namespace vkr {
 		sun.pcf_sample_count = 64;
 		sun.blocker_search_sample_count = 20;
 
-		shadow_sampler = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow | Sampler::Flags::clamp);
-		fb_sampler     = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::shadow | Sampler::Flags::clamp);
+		shadow_sampler = new Sampler(video, Sampler::Flags::filter_linear | Sampler::Flags::shadow);
+		fb_sampler     = new Sampler(video, Sampler::Flags::filter_none | Sampler::Flags::clamp);
 
 		default_texture = new Texture(video, (const void*)default_texture_data, v2i(2, 2),
 			Texture::Flags::dimentions_2 | Texture::Flags::filter_none | Texture::Flags::format_rgba8);

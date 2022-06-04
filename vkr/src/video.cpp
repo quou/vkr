@@ -2117,16 +2117,37 @@ namespace vkr {
 
 		VkSamplerCreateInfo sampler_info{};
 		sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-		sampler_info.magFilter = (flags & Flags::filter_linear) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-		sampler_info.minFilter = (flags & Flags::filter_linear) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-		sampler_info.addressModeU = (flags & Flags::clamp) ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE : VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		sampler_info.addressModeV = (flags & Flags::clamp) ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE : VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		sampler_info.addressModeW = (flags & Flags::clamp) ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE : VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
+		if (flags & Flags::filter_linear) {
+			sampler_info.magFilter = VK_FILTER_LINEAR;
+			sampler_info.minFilter = VK_FILTER_LINEAR;
+		} else {
+			sampler_info.magFilter = VK_FILTER_NEAREST;
+			sampler_info.minFilter = VK_FILTER_NEAREST;
+		}
+
+		if (flags & Flags::clamp) {
+			sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		} else {
+			sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		}
+
 		sampler_info.anisotropyEnable = VK_FALSE;
 		sampler_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 		sampler_info.unnormalizedCoordinates = VK_FALSE;
-		sampler_info.compareEnable = (flags & Flags::shadow) ? VK_TRUE            : VK_FALSE;
-		sampler_info.compareOp     = (flags & Flags::shadow) ? VK_COMPARE_OP_LESS : VK_COMPARE_OP_ALWAYS;
+
+		if (flags & Flags::shadow) {
+			sampler_info.compareEnable = VK_TRUE;
+			sampler_info.compareOp     = VK_COMPARE_OP_LESS;
+		} else {
+			sampler_info.compareEnable = VK_FALSE;
+			sampler_info.compareOp     = VK_COMPARE_OP_ALWAYS;
+		}
+
 		sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
 		if (vkCreateSampler(video->handle->device, &sampler_info, null, &handle->sampler) != VK_SUCCESS) {
