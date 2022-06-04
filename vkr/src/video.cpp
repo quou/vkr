@@ -2272,7 +2272,7 @@ namespace vkr {
 			return null;
 		}
 
-		Texture* r = new Texture(video, data, size, Flags::dimentions_2 | Flags::format_rgba8);
+		Texture* r = new Texture(video, data, size, Flags::dimentions_2 | Flags::format_rgba8 | flags);
 		
 		stbi_image_free(data);
 		

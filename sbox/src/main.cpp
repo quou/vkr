@@ -104,9 +104,9 @@ public:
 		cube = Model3D::from_wavefront(video, cube_obj);
 		delete cube_obj;
 
-		wall_a = Texture::from_file(video, "res/textures/walla.jpg");
-		wall_n = Texture::from_file(video, "res/textures/walln.png");
-		wood_a = Texture::from_file(video, "res/textures/wooda.jpg");
+		wall_a = Texture::from_file(video, "res/textures/walla.jpg", Texture::Flags::filter_linear);
+		wall_n = Texture::from_file(video, "res/textures/walln.png", Texture::Flags::filter_linear);
+		wood_a = Texture::from_file(video, "res/textures/wooda.jpg", Texture::Flags::filter_linear);
 
 		Renderer3D::Material materials[] = {
 			{
