@@ -419,8 +419,12 @@ public:
 	}
 };
 
-i32 main() {
+i32 main(i32 argc, const char** argv) {
+	vkr::init_packer(argc, argv);
+
 	SandboxApp* app = new SandboxApp();
 	app->run();
 	delete app;
+
+	vkr::deinit_packer();
 }

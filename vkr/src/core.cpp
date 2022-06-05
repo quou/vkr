@@ -57,7 +57,70 @@ namespace vkr {
 		exit(1);
 	}
 
+	u64 elf_hash(const u8* data, usize size) {
+		u64 hash = 0, x = 0;
+
+		for (u32 i = 0; i < size; i++) {
+			hash = (hash << 4) + data[i];
+			if ((x = hash & 0xF000000000LL) != 0) {
+				hash ^= (x >> 24);
+				hash &= ~x;
+			}
+		}
+
+		return (hash & 0x7FFFFFFFFF);
+	}
+
+	u64 hash_string(const char* str) {
+		return elf_hash(reinterpret_cast<const u8*>(str), strlen(str));
+	}
+
+	struct PackHeader {
+		u64 table_offset;
+		u64 table_count;
+		u64 path_offset;
+		u64 blob_offset;
+	};
+
+	struct {
+		FILE* file;
+
+		u64 pack_size;
+		u64 self_size;
+		u64 pack_offset;
+
+		PackHeader header;
+	} packer;
+
+	void init_packer(i32 argc, const char** argv) {
+		packer.file = fopen(argv[0], "rb");
+
+		if (!packer.file) {
+			abort_with("Failed to fopen myself (%s).", argv[0]);
+		}
+
+		fseek(packer.file, 0, SEEK_END);
+		packer.self_size = ftell(packer.file);
+
+		fseek(packer.file, packer.self_size - sizeof(u64), SEEK_SET);
+
+		fread(&packer.pack_size, 1, sizeof(u64), packer.file);
+
+		packer.pack_offset = packer.self_size - packer.pack_size - sizeof(u64);
+
+		fseek(packer.file, packer.pack_offset, SEEK_SET);
+		fread(&packer.header.table_offset, 1, sizeof(u64), packer.file);
+		fread(&packer.header.table_count,  1, sizeof(u64), packer.file);
+		fread(&packer.header.path_offset,  1, sizeof(u64), packer.file);
+		fread(&packer.header.blob_offset,  1, sizeof(u64), packer.file);
+	}
+
+	void deinit_packer() {
+		fclose(packer.file);
+	}
+
 	bool read_raw(const char* path, u8** buffer, usize* size) {
+#if DEBUG
 		FILE* file = fopen(path, "rb");
 		if (!file) {
 			error("Failed to fopen `%s' for reading.", path);
@@ -76,52 +139,40 @@ namespace vkr {
 		}
 
 		return true;
-	}
+#else
+		/* Search for the file in the package. */
+		for (u64 i = 0; i < packer.header.table_count; i++) {
+			fseek(packer.file, packer.pack_offset + packer.header.table_offset + (i * sizeof(u64) * 5), SEEK_SET);
 
-	bool read_raw_text(const char* path, char** buffer) {
-		FILE* file = fopen(path, "r");
-		if (!file) {
-			error("Failed to fopen `%s' for reading.", path);
-			return false;
-		}
+			u64 path_hash, path_offset, blob_offset, blob_size, path_size;
 
-		fseek(file, 0, SEEK_END);
-		usize file_size = ftell(file);
-		fseek(file, 0, SEEK_SET);
+			fread(&path_hash,   sizeof(u64), 1, packer.file);
+			fread(&path_offset, sizeof(u64), 1, packer.file);
+			fread(&blob_offset, sizeof(u64), 1, packer.file);
+			fread(&blob_size,   sizeof(u64), 1, packer.file);
+			fread(&path_size,   sizeof(u64), 1, packer.file);
 
-		*buffer = new char[file_size + 1];
-		if (fread(*buffer, 1, file_size, file) < file_size) {
-			warning("Couldn't read all of `%s'.", path);
-		}
+			char name[1024];
+			fseek(packer.file, packer.pack_offset + packer.header.path_offset + path_offset, SEEK_SET);
+			fread(name, 1, path_size, packer.file);
+			name[path_size] = '\0';
 
-		(*buffer)[file_size] = '\0';
+			if (strcmp(path, name) == 0) {
+				*buffer = new u8[blob_size];
+				fseek(packer.file, packer.pack_offset + packer.header.blob_offset + blob_offset, SEEK_SET);
+				fread(*buffer, 1, blob_size, packer.file);
 
-		return true;
-	}
+				if (size) {
+					*size = blob_size;
+				}
 
-	bool write_raw(const char* path, u8* buffer, usize* size) {
-		return false;
-	}
-
-	bool write_raw_text(const char* path, char* buffer) {
-		return false;
-	}
-
-	u64 elf_hash(const u8* data, usize size) {
-		u64 hash = 0, x = 0;
-
-		for (u32 i = 0; i < size; i++) {
-			hash = (hash << 4) + data[i];
-			if ((x = hash & 0xF000000000LL) != 0) {
-				hash ^= (x >> 24);
-				hash &= ~x;
+				return true;
 			}
 		}
 
-		return (hash & 0x7FFFFFFFFF);
-	}
+		error("Failed to find `%s' in package.", path);
 
-	u64 hash_string(const char* str) {
-		return elf_hash(reinterpret_cast<const u8*>(str), strlen(str));
+		return false;
+#endif
 	}
 }

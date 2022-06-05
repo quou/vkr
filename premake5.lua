@@ -7,5 +7,7 @@ workspace "vkr"
 
 	startproject "sbox"
 
+include "packer"
+
 include "vkr"
 include "sbox"

@@ -759,8 +759,15 @@ namespace vkr {
 	}
 
 	Bitmap* Bitmap::from_file(const char* path) {
+		u8* raw_data;
+		usize raw_size;
+
+		if (!read_raw(path, &raw_data, &raw_size)) {
+			return null;
+		}
+
 		i32 w, h, channels;
-		void* data = stbi_load(path, &w, &h, &channels, 4);
+		void* data = stbi_load_from_memory(raw_data, raw_size, &w, &h, &channels, 4);
 		if (!data) {
 			error("Failed to load `%s': %s.", path, stbi_failure_reason());
 			return null;
@@ -769,6 +776,8 @@ namespace vkr {
 		auto bitmap = new Bitmap;
 		bitmap->size = v2i(w, h);
 		bitmap->data = data;
+
+		delete[] raw_data;
 
 		return bitmap;
 	}

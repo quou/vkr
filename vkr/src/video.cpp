@@ -2271,9 +2271,15 @@ namespace vkr {
 	}
 
 	Texture* Texture::from_file(VideoContext* video, const char* file_path, Flags flags) {
+		usize raw_size;
+		u8* raw_data;
+		if (!read_raw(file_path, &raw_data, &raw_size)) {
+			return null;
+		}
+
 		v2i size;
 		i32 channels;
-		void* data = stbi_load(file_path, &size.x, &size.y, &channels, 4);
+		void* data = stbi_load_from_memory(raw_data, raw_size, &size.x, &size.y, &channels, 4);
 		if (!data) {
 			error("Failed to load `%s': %s.", file_path, stbi_failure_reason());
 			return null;
@@ -2282,6 +2288,8 @@ namespace vkr {
 		Texture* r = new Texture(video, data, size, Flags::dimentions_2 | Flags::format_rgba8 | flags);
 		
 		stbi_image_free(data);
+
+		delete[] raw_data;
 		
 		return r;
 	}

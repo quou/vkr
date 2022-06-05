@@ -1,4 +1,4 @@
-project "sbox"
+project "packer"
 	kind "ConsoleApp"
 	language "C++"
 	cppdialect "C++20"
@@ -22,20 +22,16 @@ project "sbox"
 
 	links {
 		"vkr",
-		"ecs"
 	}
 
 	defines {
 		"VKR_IMPORT_SYMBOLS"
 	}
 
-	filter { "system:linux", "configurations:release" }
-		postbuildcommands {
-			"cd ../ && ./bin/packer res/ ./bin/sbox"
+	filter "system:linux"
+		links {
+			"m",
 		}
-	
-	filter { "system:windows", "configurations:release" }
-		-- TODO: postbuildcommands
 
 	filter "configurations:debug"
 		runtime "debug"

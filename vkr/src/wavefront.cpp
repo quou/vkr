@@ -1,6 +1,9 @@
 #include <string.h>
 #include <stdio.h>
 
+#include <sstream>
+#include <string>
+
 #include "wavefront.hpp"
 #include "vkr.hpp"
 
@@ -145,25 +148,25 @@ namespace vkr {
 	}
 
 	WavefrontModel* WavefrontModel::from_file(const char* filename) {
-		FILE* file = fopen(filename, "r");
-		if (!file) {
-			error("Failed fopen `%s'.", filename);
-			return null;
-		}
+		u8* raw_data;
+		usize raw_size;
+
+		read_raw(filename, &raw_data, &raw_size);
+
+		std::string stringdata(const_cast<const char*>(reinterpret_cast<char*>(raw_data)), raw_size);
+		std::stringstream stream(stringdata);
+
+		delete[] raw_data;
 
 		WavefrontModel* model = new WavefrontModel();
 
-		char* line = new char[256];
-
 		Mesh* current_mesh = &model->root_mesh;
 
-		while (fgets(line, 256, file)) {
-			u32 line_len = (u32)strlen(line);
-
-			/* Strip the newline that fgets reads as well as the line. */
-			if (line[line_len - 1] == '\n') {
-				line[line_len - 1] = '\0';
-			}
+		std::string stringline;
+		const char* line;
+		while (std::getline(stream, stringline)) {
+			line = stringline.c_str();
+			usize line_len = stringline.size();
 
 			switch (line[0]) {
 				case 'o':
@@ -195,8 +198,6 @@ namespace vkr {
 		}
 			
 		model->has_root_mesh = model->root_mesh.vertices.size() > 0;
-
-		delete[] line;
 
 		return model;
 	}

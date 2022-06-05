@@ -20,10 +20,10 @@ namespace vkr {
 	VKR_API void vinfo(const char* fmt, va_list args);
 	VKR_API void vabort_with(const char* fmt, va_list args);
 
+	VKR_API void init_packer(i32 argc, const char** argv);
+	VKR_API void deinit_packer();
+
 	VKR_API bool read_raw(const char* path, u8** buffer, usize* size);
-	VKR_API bool read_raw_text(const char* path, char** buffer);
-	VKR_API bool write_raw(const char* path, u8* buffer, usize* size);
-	VKR_API bool write_raw_text(const char* path, char* buffer);
 
 	VKR_API u64 elf_hash(const u8* data, usize size);
 	VKR_API u64 hash_string(const char* str);
