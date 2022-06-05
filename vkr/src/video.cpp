@@ -1131,6 +1131,8 @@ namespace vkr {
 		depth_stencil.depthBoundsTestEnable = VK_FALSE;
 		depth_stencil.stencilTestEnable = VK_FALSE;
 
+		auto color_blend_attachments = new VkPipelineColorBlendAttachmentState[framebuffer->handle->color_count]();
+
 		VkPipelineColorBlendAttachmentState color_blend_attachment{};
 		color_blend_attachment.colorWriteMask =
 			VK_COLOR_COMPONENT_R_BIT |
@@ -1149,12 +1151,16 @@ namespace vkr {
 			color_blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
 		}
 
+		for (usize i = 0; i < framebuffer->handle->color_count; i++) {
+			color_blend_attachments[i] = color_blend_attachment;
+		}
+
 		VkPipelineColorBlendStateCreateInfo color_blending{};
 		color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 		color_blending.logicOpEnable = VK_FALSE;
 		color_blending.logicOp = VK_LOGIC_OP_COPY;
-		color_blending.attachmentCount = 1;
-		color_blending.pAttachments = &color_blend_attachment;
+		color_blending.attachmentCount = framebuffer->handle->color_count;
+		color_blending.pAttachments = color_blend_attachments;
 
 		/* Count the descriptors of different types to create a descriptor pool. */
 		sampler_count = uniform_count = 0;
@@ -1414,6 +1420,7 @@ namespace vkr {
 			abort_with("Failed to create pipeline.");
 		}
 
+		delete[] color_blend_attachments;
 		delete[] vk_attribs;
 		delete[] pc_ranges;
 		delete[] set_layouts;
@@ -1658,7 +1665,7 @@ namespace vkr {
 
 			for (usize i = 0; i < depth_index; i++) {
 				v_attachments[i] = ca_descs[i];
-				handle->clear_colors[i].color = {{ 0.1f, 0.1f, 0.1f, 1.0f }};
+				handle->clear_colors[i].color = {{ 0.0f, 0.0f, 0.0f, 0.0f }};
 			}
 
 			v_attachments[depth_index] = depth_attachment;

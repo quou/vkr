@@ -17,8 +17,12 @@ namespace vkr {
 	PostProcessStep::PostProcessStep(
 			Renderer3D* renderer, Shader* shader,
 			Dependency* dependencies, usize dependency_count,
-			bool use_default_fb) : framebuffer(null), use_default_fb(use_default_fb),
-			dependency_count(dependency_count), renderer(renderer) {
+			bool use_default_fb,
+			void* uniform_buffer,
+			usize uniform_buffer_size,
+			void* pc, usize pc_size) : framebuffer(null), use_default_fb(use_default_fb),
+			dependency_count(dependency_count), renderer(renderer),
+			pc(pc), pc_size(pc_size) {
 
 		if (!use_default_fb) {
 			Framebuffer::Attachment attachments[] = {
@@ -52,13 +56,20 @@ namespace vkr {
 		};
 
 
-		Pipeline::Descriptor uniform_desc{};
-		uniform_desc.name = "fragment_uniform_buffer";
-		uniform_desc.binding = 0;
-		uniform_desc.stage = Pipeline::Stage::fragment;
-		uniform_desc.resource.type = Pipeline::ResourcePointer::Type::uniform_buffer;
-		uniform_desc.resource.uniform.ptr = &renderer->f_post_ub;
-		uniform_desc.resource.uniform.size = sizeof(renderer->f_post_ub);
+		Pipeline::Descriptor uniform_descs[2];
+		uniform_descs[0].name = "fragment_uniform_buffer";
+		uniform_descs[0].binding = 0;
+		uniform_descs[0].stage = Pipeline::Stage::fragment;
+		uniform_descs[0].resource.type = Pipeline::ResourcePointer::Type::uniform_buffer;
+		uniform_descs[0].resource.uniform.ptr = &renderer->f_post_ub;
+		uniform_descs[0].resource.uniform.size = sizeof(renderer->f_post_ub);
+
+		uniform_descs[1].name = "fragment_uniform_buffer";
+		uniform_descs[1].binding = 1;
+		uniform_descs[1].stage = Pipeline::Stage::fragment;
+		uniform_descs[1].resource.type = Pipeline::ResourcePointer::Type::uniform_buffer;
+		uniform_descs[1].resource.uniform.ptr = uniform_buffer;
+		uniform_descs[1].resource.uniform.size = uniform_buffer_size;
 
 		auto sampler_descs = new Pipeline::Descriptor[dependency_count]();
 		for (usize i = 0; i < dependency_count; i++) {
@@ -74,13 +85,22 @@ namespace vkr {
 		Pipeline::DescriptorSet desc_sets[] = {
 			{
 				.name = "uniforms",
-				.descriptors = &uniform_desc,
-				.count = 1,
+				.descriptors = uniform_descs,
+				.count = (uniform_buffer_size > 0) ? 2u : 1u,
 			},
 			{
 				.name = "samplers",
 				.descriptors = sampler_descs,
 				.count = dependency_count
+			}
+		};
+
+		Pipeline::PushConstantRange pc_range[] = {
+			{
+				.name = "push_data",
+				.size = pc_size,
+				.start = 0,
+				.stage = Pipeline::Stage::fragment
 			}
 		};
 
@@ -90,7 +110,8 @@ namespace vkr {
 			sizeof(v2f) * 2,
 			post_attribs, 2,
 			framebuffer,
-			desc_sets, 2);
+			desc_sets, 2,
+			pc_range, pc_size > 0 ? 1 : 0);
 
 		delete[] sampler_descs;
 	}
@@ -111,6 +132,10 @@ namespace vkr {
 
 		pipeline->bind_descriptor_set(0, 0);
 		pipeline->bind_descriptor_set(1, 1);
+
+		if (pc_size > 0) {
+			pipeline->push_constant(Pipeline::Stage::fragment, pc, pc_size, 0);
+		}
 
 		renderer->fullscreen_tri->bind();
 		renderer->fullscreen_tri->draw(3);
@@ -144,6 +169,14 @@ namespace vkr {
 				.format = Framebuffer::Attachment::Format::rgbaf16,
 			},
 			{
+				.type = Framebuffer::Attachment::Type::color,
+				.format = Framebuffer::Attachment::Format::rgbaf16,
+			},
+			{
+				.type = Framebuffer::Attachment::Type::color,
+				.format = Framebuffer::Attachment::Format::rgbaf16,
+			},
+			{
 				.type = Framebuffer::Attachment::Type::depth,
 				.format = Framebuffer::Attachment::Format::depth,
 			},
@@ -156,7 +189,7 @@ namespace vkr {
 
 		scene_fb = new Framebuffer(video,
 			Framebuffer::Flags::headless | Framebuffer::Flags::fit,
-			app->get_size(), attachments, 2);
+			app->get_size(), attachments, 4);
 
 		shadow_fb = new Framebuffer(video,
 			Framebuffer::Flags::headless,
@@ -314,10 +347,30 @@ namespace vkr {
 
 		fullscreen_tri = new VertexBuffer(video, tri_verts, sizeof(tri_verts));
 
-		PostProcessStep::Dependency bright_extract_deps[] = {
+		PostProcessStep::Dependency lighting_deps[] = {
 			{
 				.name = "color",
 				.framebuffer = scene_fb,
+				.attachment = 0
+			},
+			{
+				.name = "normals",
+				.framebuffer = scene_fb,
+				.attachment = 1
+			},
+			{
+				.name = "positions",
+				.framebuffer = scene_fb,
+				.attachment = 2
+			}
+		};
+
+		lighting = new PostProcessStep(this, shaders.lighting, lighting_deps, 3, false, &light_ub, sizeof(light_ub), &f_pc, sizeof(f_pc));
+
+		PostProcessStep::Dependency bright_extract_deps[] = {
+			{
+				.name = "color",
+				.framebuffer = lighting->get_framebuffer(),
 				.attachment = 0
 			}
 		};
@@ -367,7 +420,7 @@ namespace vkr {
 		PostProcessStep::Dependency tonemap_deps[] = {
 			{
 				.name = "color",
-				.framebuffer = scene_fb,
+				.framebuffer = lighting->get_framebuffer(),
 				.attachment = 0
 			}
 		};
@@ -405,6 +458,7 @@ namespace vkr {
 		delete shadow_pip;
 		delete shadow_fb;
 		delete tonemap;
+		delete lighting;
 		delete composite;
 		delete bright_extract;
 		delete blur_v;
@@ -506,17 +560,17 @@ namespace vkr {
 		f_ub.aspect = (f32)size.x / (f32)size.y;
 		f_ub.fov = to_rad(camera.fov);
 
-		f_ub.point_light_count = 0;
+		light_ub.point_light_count = 0;
 		for (ecs::View view = world->new_view<Transform, PointLight>(); view.valid(); view.next()) {
 			auto& trans = view.get<Transform>();
 			auto& light = view.get<PointLight>();
 
-			auto idx = f_ub.point_light_count++;
-			f_ub.point_lights[idx].intensity = light.intensity;
-			f_ub.point_lights[idx].diffuse = light.diffuse;
-			f_ub.point_lights[idx].specular = light.specular;
-			f_ub.point_lights[idx].position = trans.m.get_translation();
-			f_ub.point_lights[idx].range = light.range;
+			auto idx = light_ub.point_light_count++;
+			light_ub.point_lights[idx].intensity = light.intensity;
+			light_ub.point_lights[idx].diffuse = light.diffuse;
+			light_ub.point_lights[idx].specular = light.specular;
+			light_ub.point_lights[idx].position = trans.m.get_translation();
+			light_ub.point_lights[idx].range = light.range;
 		}
 
 		f_ub.sun.direction = sun.direction;
@@ -567,10 +621,12 @@ namespace vkr {
 		scene_fb->end();
 
 		f_post_ub.screen_size = v2f(static_cast<f32>(size.x), static_cast<f32>(size.y));
+		f_post_ub.camera_pos = camera.position;
 		f_post_ub.bloom_threshold = pp_config.bloom_threshold;
 		f_post_ub.bloom_blur_intensity = pp_config.bloom_blur_intensity;
 		f_post_ub.bloom_intensity = pp_config.bloom_intensity;
 
+		lighting->execute();
 		tonemap->execute();
 		bright_extract->execute();
 		blur_v->execute();

@@ -168,6 +168,13 @@ namespace vkr {
 		glfwSetMouseButtonCallback(handle->window, on_mouse_button_event);
 		glfwSetCursorPosCallback(handle->window, on_mouse_move);
 
+		memset(pressed_keys,  0, static_cast<usize>(key_count) * sizeof(bool));
+		memset(released_keys, 0, static_cast<usize>(key_count) * sizeof(bool));
+		memset(held_keys,     0, static_cast<usize>(key_count) * sizeof(bool));
+		memset(pressed_mouse_buttons,  0, static_cast<usize>(mouse_button_count) * sizeof(bool));
+		memset(released_mouse_buttons, 0, static_cast<usize>(mouse_button_count) * sizeof(bool));
+		memset(held_mouse_buttons,     0, static_cast<usize>(mouse_button_count) * sizeof(bool));
+
 		on_init();
 
 		f64 now = glfwGetTime(), last = now;

@@ -1,5 +1,7 @@
 #include <stdio.h>
 
+#include <random>
+
 #include <vkr/vkr.hpp>
 #include <ecs/ecs.hpp>
 
@@ -80,6 +82,9 @@ public:
 		shaders.shadowmap = Shader::from_file(video,
 			"res/shaders/shadowmap.vert.spv",
 			"res/shaders/shadowmap.frag.spv");
+		shaders.lighting = Shader::from_file(video,
+			"res/shaders/lighting.vert.spv",
+			"res/shaders/lighting.frag.spv");
 		sprite_shader = Shader::from_file(video,
 			"res/shaders/2d.vert.spv",
 			"res/shaders/2d.frag.spv");
@@ -155,15 +160,6 @@ public:
 			.far = 100.0f
 		});
 
-		red_light = world.new_entity();
-		red_light.add(Transform { m4f::translate(m4f::identity(), v3f(-2.5f, 0.0f, 0.0f)) });
-		red_light.add(PointLight {
-			.intensity = 50.0f,
-			.specular = v3f(1.0f, 0.0f, 0.0f),
-			.diffuse = v3f(1.0f, 0.0f, 0.0f),
-			.range = 1.0f
-		});
-
 		blue_light = world.new_entity();
 		blue_light.add(Transform{ m4f::translate(m4f::identity(), v3f(2.0f, -1.0f, 1.0f)) });
 		blue_light.add(PointLight{
@@ -172,6 +168,15 @@ public:
 			.diffuse = v3f(0.0f, 0.0f, 1.0f),
 			.range = 2.0f
 			});
+
+		red_light = world.new_entity();
+		red_light.add(Transform { m4f::translate(m4f::identity(), v3f(-2.5f, 0.0f, 0.0f)) });
+		red_light.add(PointLight {
+			.intensity = 50.0f,
+			.specular = v3f(1.0f, 0.0f, 0.0f),
+			.diffuse = v3f(1.0f, 0.0f, 0.0f),
+			.range = 1.0f
+		});
 		
 		renderer->sun.direction = v3f(0.3f, 1.0f, 0.8f);
 		renderer->sun.intensity = 1.0f;
@@ -197,6 +202,11 @@ public:
 			m4f::translate(m4f::identity(), v3f(2.5f, -2.0f, 0.0f)) *
 			m4f::scale(m4f::identity(), v3f(1.0f, 5.0f, 1.0f))});
 		monolith.add(Renderable3D { cube, 1 });
+
+		std::random_device rdevice;
+		std::mt19937 rng(rdevice());
+		std::uniform_real_distribution<f32> color_dist(0.0f, 1.0f);
+		std::uniform_real_distribution<f32> position_dist(-10.0f, 10.0f);
 	}
 
 	void on_update(f64 ts) override {
@@ -213,7 +223,11 @@ public:
 
 			ui->use_font(dejavusans);
 
-			ui->text("Press <Esc> to unlock the mouse.");
+			if (camera_active) {
+				ui->text("Press <Esc> to unlock the mouse.");
+			} else {
+				ui->text("Left click on the scene to use the fly camera.");
+			}
 
 			ui->text("FPS: %g", fps);
 			ui->linebreak();
@@ -395,6 +409,7 @@ public:
 		delete shaders.blur_h;
 		delete shaders.composite;
 		delete shaders.shadowmap;
+		delete shaders.lighting;
 		delete renderer2d;
 		delete sprite_shader;
 		delete dejavusans;

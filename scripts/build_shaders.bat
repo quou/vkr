@@ -8,3 +8,4 @@ lua54 shaders\compiler.lua shaders/src/bright_extract.glsl shaders/obj/ res/shad
 lua54 shaders\compiler.lua shaders/src/blur_v.glsl shaders/obj/ res/shaders/
 lua54 shaders\compiler.lua shaders/src/blur_h.glsl shaders/obj/ res/shaders/
 lua54 shaders\compiler.lua shaders/src/2d.glsl shaders/obj/ res/shaders/
+lua54 shaders\compiler.lua shaders/src/lighting.glsl shaders/obj/ res/shaders/

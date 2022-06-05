@@ -11,3 +11,4 @@ mkdir -p res/shaders
 ./shaders/compiler.lua shaders/src/blur_h.glsl shaders/obj/ res/shaders/
 ./shaders/compiler.lua shaders/src/composite.glsl shaders/obj/ res/shaders/
 ./shaders/compiler.lua shaders/src/2d.glsl shaders/obj/ res/shaders/
+./shaders/compiler.lua shaders/src/lighting.glsl shaders/obj/ res/shaders/

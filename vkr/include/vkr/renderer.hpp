@@ -13,7 +13,7 @@ namespace vkr {
 	class Model3D;
 	class Renderer3D;
 
-	static usize constexpr max_point_lights = 32;
+	static usize constexpr max_point_lights = 256;
 
 	class VKR_API PostProcessStep {
 	private:
@@ -24,6 +24,9 @@ namespace vkr {
 
 		bool use_default_fb;
 		usize dependency_count;
+
+		void* pc;
+		usize pc_size;
 	public:
 		struct Dependency {
 			const char* name;
@@ -31,7 +34,8 @@ namespace vkr {
 			u32 attachment;
 		};
 
-		PostProcessStep(Renderer3D* renderer, Shader* shader, Dependency* dependencies, usize dependency_count, bool use_default_fb = false);
+		PostProcessStep(Renderer3D* renderer, Shader* shader, Dependency* dependencies, usize dependency_count, bool use_default_fb = false,
+			void* uniform_buffer = null, usize uniform_buffer_size = 0, void* pc = null, usize pc_size = 0);
 		~PostProcessStep();
 
 		void execute();
@@ -55,6 +59,7 @@ namespace vkr {
 
 		struct ShaderConfig {
 			Shader* lit;
+			Shader* lighting;
 			Shader* tonemap;
 			Shader* bright_extract;
 			Shader* blur_v;
@@ -64,11 +69,12 @@ namespace vkr {
 		};
 	private:
 		struct impl_PointLight {
-			alignas(4)  f32 intensity;
-			alignas(4)  f32 range;
 			alignas(16) v3f diffuse;
 			alignas(16) v3f specular;
 			alignas(16) v3f position;
+			alignas(4)  f32 intensity;
+			alignas(4)  f32 range;
+			u8 padding[4];
 		};
 
 		struct impl_DirectionalLight {
@@ -107,16 +113,19 @@ namespace vkr {
 			alignas(4) i32 pcf_sample_count;
 
 			impl_DirectionalLight sun;
-
-			alignas(4) i32 point_light_count;
-			impl_PointLight point_lights[max_point_lights];
 		} f_ub;
 
 		struct {
-			alignas(4) f32 bloom_threshold;
-			alignas(4) f32 bloom_blur_intensity;
-			alignas(4) f32 bloom_intensity;
-			alignas(8) v2f screen_size;
+			alignas(4) i32 point_light_count;
+			alignas(16) impl_PointLight point_lights[max_point_lights];
+		} light_ub;
+
+		struct {
+			alignas(4)  f32 bloom_threshold;
+			alignas(4)  f32 bloom_blur_intensity;
+			alignas(4)  f32 bloom_intensity;
+			alignas(8)  v2f screen_size;
+			alignas(16) v3f camera_pos;
 		} f_post_ub;
 
 		struct {
@@ -135,6 +144,7 @@ namespace vkr {
 		Pipeline* shadow_pip;
 		App* app;
 
+		PostProcessStep* lighting; /* Deferred lighting. */
 		PostProcessStep* bright_extract;
 		PostProcessStep* blur_v;
 		PostProcessStep* blur_h;

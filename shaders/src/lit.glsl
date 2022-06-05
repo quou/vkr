@@ -46,14 +46,7 @@ void main() {
 /* Poisson sampling is used in the blocker search to uniformly
  * sample the depth buffer to determine blockers. */
 #include "poisson_disk.glsl"
-
-#define max_point_lights 32
-
-struct PointLight {
-	float intensity, range;
-	vec3 diffuse, specular;
-	vec3 position;
-};
+#include "material.glsl"
 
 struct DirectionalLight {
 	float intensity;
@@ -64,7 +57,9 @@ struct DirectionalLight {
 	vec3 direction;
 };
 
-layout (location = 0) out vec4 color;
+layout (location = 0) out vec4 out_color;
+layout (location = 1) out vec4 out_normal;
+layout (location = 2) out vec4 out_position;
 
 layout (binding = 1) uniform FragmentData {
 	vec3 camera_pos;
@@ -78,9 +73,6 @@ layout (binding = 1) uniform FragmentData {
 	int pcf_sample_count;
 
 	DirectionalLight sun;
-
-	int point_light_count;
-	PointLight point_lights[max_point_lights];
 } data;
 
 layout (location = 0) in VertexOut {
@@ -89,13 +81,6 @@ layout (location = 0) in VertexOut {
 	vec2 uv;
 	vec4 sun_pos;
 } fs_in;
-
-struct Material {
-	vec3 diffuse;
-	vec3 specular;
-	vec3 ambient;
-	float emissive;
-};
 
 layout (push_constant) uniform PushData {
 	layout(offset = 64)
@@ -109,31 +94,6 @@ layout (set = 1, binding = 1) uniform sampler2D normal_map;
 
 layout (set = 0, binding = 2) uniform sampler2D blockermap;
 layout (set = 0, binding = 3) uniform sampler2DShadow shadowmap;
-
-vec3 compute_point_light(vec3 normal, vec3 view_dir, PointLight light) {
-	vec3 light_dir = normalize(light.position - fs_in.world_pos);
-	vec3 reflect_dir = reflect(-light_dir, normal);
-
-	float dist = length(light.position - fs_in.world_pos);
-
-	float attenuation = 1.0 / (pow((dist / light.range) * 5.0, 2.0) + 1);
-
-	vec3 diffuse =
-		attenuation *
-		light.diffuse *
-		light.intensity *
-		push_data.material.diffuse *
-		max(dot(light_dir, normal), 0.0);
-
-	vec3 specular =
-		attenuation *
-		light.specular *
-		light.intensity *
-		push_data.material.specular * 
-		pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
-
-	return diffuse + specular;
-}
 
 /* Find the average depth of the light blockers. */
 float blocker_dist(vec3 coords, float size, float bias) {
@@ -230,10 +190,6 @@ void main() {
 
 	vec3 lighting_result = vec3(0.1 * push_data.material.ambient + (push_data.material.ambient * push_data.material.emissive));
 
-	for (int i = 0; i < data.point_light_count; i++) {
-		lighting_result += compute_point_light(normal, view_dir, data.point_lights[i]);
-	}
-
 	lighting_result += compute_directional_light(normal, view_dir, data.sun);
 
 	vec4 texture_color = vec4(1.0);
@@ -241,6 +197,8 @@ void main() {
 		texture_color = texture(diffuse_map, fs_in.uv);
 	}
 
-	color = texture_color * vec4(lighting_result, 1.0);
+	out_color = texture_color * vec4(lighting_result, 1.0);
+	out_normal = vec4(normal, 1.0);
+	out_position = vec4(fs_in.world_pos, 1.0);
 }
 #end FRAGMENT
