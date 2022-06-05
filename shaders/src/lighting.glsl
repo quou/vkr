@@ -72,7 +72,10 @@ void main() {
 		result += compute_point_light(world_normal, world_pos, view_dir, lights.point_lights[i]);
 	}
 
-	color = vec4(result, 1.0) + texture(in_color, fs_in.uv);
+	/* To make sure that the clear colour doesn't get lit. */
+	vec4 multiplier = vec4(world_normal != vec3(0.0) ? 1.0 : 0.0);
+
+	color = (multiplier * vec4(result, 1.0)) + texture(in_color, fs_in.uv);
 }
 
 #end FRAGMENT
