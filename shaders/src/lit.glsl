@@ -103,9 +103,7 @@ float blocker_dist(vec3 coords, float size, float bias) {
 	float width = size * (coords.z - data.near_plane) / max(1.0f, data.camera_pos.z);
 
 	for (int i = 0; i < data.blocker_search_sample_count; i++) {
-		int index = int(64.0 * random(floor(fs_in.world_pos.xyz * 1000.0), i)) % 64;
-
-		float z = texture(blockermap, coords.xy + poisson_disk[index] * width).r;
+		float z = texture(blockermap, coords.xy + poisson_disk[i] * width).r;
 		if (z < coords.z - bias) {
 			blocker_count++;
 			r += z;
@@ -123,9 +121,7 @@ float pcf(vec3 coords, float radius, float bias) {
 	float r = 0.0;
 
 	for (int i = 0; i < data.pcf_sample_count; i++) {
-		int index = int(64.0 * random(floor(fs_in.world_pos.xyz * 1000.0), i)) % 64;
-
-		r += texture(shadowmap, vec3(coords.xy + radius * poisson_disk[index], coords.z - bias));
+		r += texture(shadowmap, vec3(coords.xy + radius * poisson_disk[i], coords.z - bias));
 	}
 
 	return r / float(data.pcf_sample_count);
@@ -166,12 +162,7 @@ vec3 compute_directional_light(vec3 normal, vec3 view_dir, DirectionalLight ligh
 	float texel_size = 1.0 / textureSize(shadowmap, 0).x;
 
 	float pcf_radius = penumbra * light_size * data.near_plane / coords.z;
-//	float pcf_radius = 0.01f;
 	float shadow = pcf(coords, pcf_radius, data.sun.bias);
-
-//	float shadow = texture(shadowmap, vec3(coords.xy, coords.z - data.sun.bias));
-
-	//shadow = blocker;
 
 	return (shadow) * (diffuse + specular);
 }

@@ -253,13 +253,13 @@ public:
 			ui->text("%.2f", renderer->sun.softness);
 
 			ui->label("Blocker Samples");
-			static f32 new_blocker_search_sample_count = 16;
+			static f32 new_blocker_search_sample_count = 36;
 			ui->slider(&new_blocker_search_sample_count, 0.0f, 128.0f);
 			ui->text("%d", renderer->sun.blocker_search_sample_count);
 			renderer->sun.blocker_search_sample_count = static_cast<i32>(new_blocker_search_sample_count);
 
 			ui->label("PCF Samples");
-			static f32 new_pcf_sample_count = 16;
+			static f32 new_pcf_sample_count = 64;
 			ui->slider(&new_pcf_sample_count, 0.0f, 128.0f);
 			ui->text("%d", renderer->sun.pcf_sample_count);
 			renderer->sun.pcf_sample_count = static_cast<i32>(new_pcf_sample_count);
