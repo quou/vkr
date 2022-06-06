@@ -36,7 +36,7 @@ project "sbox"
 	
 	filter { "system:windows", "configurations:release" }
 		postbuildcommands {
-			"cd ..\\ && bin\\packer.exe res bin\\sbox.exe"
+			"cd \"$(SolutionDir)\" && bin\\packer.exe res bin\\sbox.exe"
 		}
 
 	filter "system:windows"

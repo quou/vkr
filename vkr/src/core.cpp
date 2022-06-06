@@ -5,6 +5,10 @@
 
 #include "vkr.hpp"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace vkr {
 	void error(const char* fmt, ...) {
 		va_list args;
@@ -35,19 +39,40 @@ namespace vkr {
 	}
 
 	void verror(const char* fmt, va_list args) {
+#ifdef _WIN32
+		auto console = GetStdHandle(STD_OUTPUT_HANDLE);
+		SetConsoleTextAttribute(console, FOREGROUND_RED);
+		printf("error ");
+		SetConsoleTextAttribute(console, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+#else
 		printf("\033[31;31merror \033[0m");
+#endif
 		vprintf(fmt, args);
 		printf("\n");
 	}
 
 	void vwarning(const char* fmt, va_list args) {
-		printf("\033[31;35mwarning \033[0m");
+#ifdef _WIN32
+		auto console = GetStdHandle(STD_OUTPUT_HANDLE);
+		SetConsoleTextAttribute(console, FOREGROUND_RED | FOREGROUND_BLUE);
+		printf("warning ");
+		SetConsoleTextAttribute(console, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+#else
+		printf("\033[31;31mwarning \033[0m");
+#endif
 		vprintf(fmt, args);
 		printf("\n");
 	}
 
 	void vinfo(const char* fmt, va_list args) {
-		printf("\033[31;32minfo \033[0m");
+#ifdef _WIN32
+		auto console = GetStdHandle(STD_OUTPUT_HANDLE);
+		SetConsoleTextAttribute(console, FOREGROUND_GREEN);
+		printf("info ");
+		SetConsoleTextAttribute(console, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+#else
+		printf("\033[31;31minfo \033[0m");
+#endif
 		vprintf(fmt, args);
 		printf("\n");
 	}
@@ -93,6 +118,7 @@ namespace vkr {
 	} packer;
 
 	void init_packer(i32 argc, const char** argv) {
+#ifndef DEBUG
 		packer.file = fopen(argv[0], "rb");
 
 		if (!packer.file) {
@@ -113,10 +139,13 @@ namespace vkr {
 		fread(&packer.header.table_count,  1, sizeof(u64), packer.file);
 		fread(&packer.header.path_offset,  1, sizeof(u64), packer.file);
 		fread(&packer.header.blob_offset,  1, sizeof(u64), packer.file);
+#endif
 	}
 
 	void deinit_packer() {
+#ifndef DEBUG
 		fclose(packer.file);
+#endif
 	}
 
 	bool read_raw(const char* path, u8** buffer, usize* size) {
