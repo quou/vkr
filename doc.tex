@@ -3,12 +3,13 @@
 \title {\textbf{Vulkan Renderer}}
 \date{June 2022}
 
-\usepackage{blindtext}
 \usepackage{amsmath}
-\usepackage{multicol}
+\usepackage{blindtext}
+\usepackage{caption}
 \usepackage{geometry}
-\usepackage{hyperref}
 \usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{multicol}
 
 \geometry{
 	a4paper,
@@ -16,6 +17,11 @@
 	%right=
 	%bottom=
 	top=15mm}
+
+
+\newenvironment{Figure}
+  {\par\medskip\noindent\minipage{\linewidth}}
+  {\endminipage\par\medskip}
 
 \begin{document}
 		\maketitle
@@ -155,11 +161,18 @@
 						application all of the assets would be loaded first anyhow.
 					\item Making the PCF on the shadows look acceptable was
 						difficult, as PCF can often cause banding if the sample
-						count is not high enough to match the radius. With 64
-						samples, the shadows look good as long as the shadow
-						softness parameter is not too high (by default the
-						shadow softness is set to 0.15).
+						count is not high enough to match the radius, as seen in
+						Figure \ref{fig:shadow}. With 64 samples, the shadows look
+						good as long as the shadow softness parameter is not too
+						high (by default the shadow softness is set to 0.15).
 				\end{itemize}
+
+			\begin{Figure}
+				\centering
+				\includegraphics[width=\linewidth]{media/shadow.png}
+				\captionof{figure}{Zooming into the shadow reveals ugly banding from PCF.}
+				\label{fig:shadow}
+			\end{Figure}
 
 			Some features that may be interesting but that I didn't get around
 			to are:
