@@ -35,7 +35,9 @@ project "sbox"
 		}
 	
 	filter { "system:windows", "configurations:release" }
-		-- TODO: postbuildcommands
+		postbuildcommands {
+			"cd ..\\ && bin\\packer.exe res bin\\sbox.exe"
+		}
 
 	filter "configurations:debug"
 		runtime "debug"

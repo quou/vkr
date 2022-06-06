@@ -1618,7 +1618,11 @@ namespace vkr {
 			 * images, as that goes against the Vulkan spec. */
 			size.x = video->handle->swapchain_extent.width;
 			size.y = video->handle->swapchain_extent.height;
+
+			drawable_size = size;
 		} else {
+			drawable_size = size;
+
 			/* Map the actual indices to attachments. */
 			handle->colors = new impl_Attachment[color_attachment_count];
 			for (usize i = 0, ci = 0; i < attachment_count; i++, ci++) {
@@ -1946,7 +1950,7 @@ namespace vkr {
 		render_pass_info.renderPass = handle->render_pass;
 		render_pass_info.framebuffer = handle->get_current_framebuffer(video->image_id, video->current_frame);
 		render_pass_info.renderArea.offset = { 0, 0 };
-		render_pass_info.renderArea.extent = VkExtent2D { (u32)get_scaled_size().x, (u32)get_scaled_size().y };
+		render_pass_info.renderArea.extent = VkExtent2D { (u32)get_drawable_size().x, (u32)get_drawable_size().y };
 		render_pass_info.clearValueCount = handle->clear_color_count;
 		render_pass_info.pClearValues = handle->clear_colors;
 

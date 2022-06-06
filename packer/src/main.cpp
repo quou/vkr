@@ -43,15 +43,18 @@ i32 main(i32 argc, const char** argv) {
 
 	for (const auto& resource : std::filesystem::recursive_directory_iterator(argv[1])) {
 		if (resource.is_regular_file()) {
-			u64 path_hash = hash_string(resource.path().c_str());
+			std::string path_string = resource.path().string();
+			std::replace(path_string.begin(), path_string.end(), '\\', '/');
+
+			u64 path_hash = hash_string(path_string.c_str());
 
 			resources[path_hash] = Entry {
 				.path_hash = path_hash,
 				.path_offset = 0,
 				.blob_offset = 0,
 				.blob_size = resource.file_size(),
-				.path_size = resource.path().string().size(),
-				.name = resource.path().string()
+				.path_size = path_string.size(),
+				.name = path_string
 			};
 		}
 	}

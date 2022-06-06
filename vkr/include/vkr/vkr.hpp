@@ -192,6 +192,7 @@ namespace vkr {
 		bool depth_enable;
 
 		v2i size;
+		v2i drawable_size;
 		f32 scale;
 
 		bool is_recreating;
@@ -232,6 +233,7 @@ namespace vkr {
 
 		inline v2i get_size() const { return size; }
 		inline v2i get_scaled_size() const { return v2i((i32)((f32)size.x) * scale, (i32)((f32)size.y) * scale); }
+		inline v2i get_drawable_size() const { return drawable_size; }
 
 		void resize(v2i size);
 

@@ -1114,7 +1114,7 @@ namespace vkr {
 
 		if (want_recreate) { return; }
 
-		f32 tx, ty, tw, th;
+		f32 tx = 0.0f, ty = 0.0f, tw = 0.0f, th = 0.0f;
 
 		if (quad.image) {
 			tx = (f32)rect.x / (f32)atlas->get_size().x;
