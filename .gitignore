@@ -48,6 +48,9 @@ tags
 *.tiled-session
 .vscode
 
+doc.pdf
+doc.log
+
 # SPIR-V output
 *.spv
 res/shaders
