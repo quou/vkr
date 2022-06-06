@@ -132,7 +132,7 @@ namespace vkr {
 
 	/* To be inherited by client applications to provide custom
 	 * functionality and data. */
-	class VKR_API App {
+	class App {
 	private:
 		impl_App* handle;
 
@@ -148,21 +148,21 @@ namespace vkr {
 		v2i size, mouse_pos;
 		VideoContext* video;
 
-		App(const char* title, v2i size);
+		VKR_API App(const char* title, v2i size);
 
 		virtual void on_init() = 0;
 		virtual void on_update(f64) = 0;
 		virtual void on_deinit() = 0;
 
-		virtual ~App() {};
+		VKR_API virtual ~App() {};
 
-		void run();
+		VKR_API void run();
 
-		v2i get_size() const;
-		Framebuffer* get_default_framebuffer() const;
+		VKR_API v2i get_size() const;
+		VKR_API Framebuffer* get_default_framebuffer() const;
 
-		void lock_mouse();
-		void unlock_mouse();
+		VKR_API void lock_mouse();
+		VKR_API void unlock_mouse();
 
 		bool held_keys    [static_cast<i32>(key_count)];
 		bool pressed_keys [static_cast<i32>(key_count)];
@@ -232,7 +232,7 @@ namespace vkr {
 		~Framebuffer();
 
 		inline v2i get_size() const { return size; }
-		inline v2i get_scaled_size() const { return v2i((i32)((f32)size.x) * scale, (i32)((f32)size.y) * scale); }
+		inline v2i get_scaled_size() const { return v2i((i32)((f32)size.x * scale), (i32)((f32)size.y * scale)); }
 		inline v2i get_drawable_size() const { return drawable_size; }
 
 		void resize(v2i size);
@@ -487,7 +487,7 @@ namespace vkr {
 		return static_cast<i32>(a) & static_cast<i32>(b);
 	}
 
-	class VKR_API VideoContext {
+	class VideoContext {
 	private:
 		bool validation_layers_supported();
 
@@ -524,16 +524,16 @@ namespace vkr {
 		impl_VideoContext* handle;
 		bool want_recreate;
 
-		VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions);
-		~VideoContext();
+		VKR_API VideoContext(const App& app, const char* app_name, bool enable_validation_layers, u32 extension_count, const char** extensions);
+		VKR_API ~VideoContext();
 
 		/* Waits for all the current operations to finish. */
-		void wait_for_done() const;
+		VKR_API void wait_for_done() const;
 
-		void begin();
-		void end();
+		VKR_API void begin();
+		VKR_API void end();
 
-		void resize(v2i new_size);
+		VKR_API void resize(v2i new_size);
 
 		inline bool are_validation_layers_enabled() const { return validation_layers_enabled; }
 	};

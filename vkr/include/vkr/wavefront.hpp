@@ -6,7 +6,7 @@
 #include "maths.hpp"
 
 namespace vkr {
-	struct VKR_API WavefrontModel {
+	struct WavefrontModel {
 		struct Vertex {
 			usize position, uv, normal;
 		};
@@ -23,7 +23,7 @@ namespace vkr {
 		std::vector<v3f> normals;
 		std::vector<v2f> uvs;
 
-		static WavefrontModel* from_file(const char* filename);
-		~WavefrontModel();
+		static VKR_API WavefrontModel* from_file(const char* filename);
+		VKR_API ~WavefrontModel();
 	};
 }

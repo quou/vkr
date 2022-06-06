@@ -18,6 +18,11 @@ project "ecs"
 		"include"
 	}
 
+	filter "system:windows"
+		defines {
+			"_CRT_SECURE_NO_WARNINGS"
+		}
+
 	filter "configurations:debug"
 		runtime "debug"
 		symbols "on"

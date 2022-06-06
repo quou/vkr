@@ -50,6 +50,9 @@ tags
 
 doc.pdf
 doc.log
+doc.out
+doc.aux
+doc.dvi
 
 # SPIR-V output
 *.spv

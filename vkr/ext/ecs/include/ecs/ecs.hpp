@@ -295,7 +295,7 @@ namespace ecs {
 				entities = new_alloc;
 			}
 
-			const Entity_Handle e = internal::make_handle(entity_count, 0);
+			const Entity_Handle e = internal::make_handle(static_cast<Entity_ID>(entity_count), 0);
 			entities[entity_count++] = e;
 
 			return e;

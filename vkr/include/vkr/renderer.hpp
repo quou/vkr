@@ -213,7 +213,7 @@ namespace vkr {
 		~Mesh3D();
 	};
 
-	class VKR_API Model3D {
+	class Model3D {
 	private:
 		std::vector<Mesh3D*> meshes;
 
@@ -222,8 +222,8 @@ namespace vkr {
 		friend class Renderer3D;
 		friend class Mesh3D;
 	public:
-		static Model3D* from_wavefront(VideoContext* video, WavefrontModel* wmodel);
-		~Model3D();
+		static VKR_API Model3D* from_wavefront(VideoContext* video, WavefrontModel* wmodel);
+		VKR_API ~Model3D();
 
 		inline const AABB& get_aabb() const { return aabb; }
 	};
@@ -286,7 +286,7 @@ namespace vkr {
 		f32 height();
 	};
 
-	class VKR_API Renderer2D {
+	class Renderer2D {
 	public:
 		struct Pixel {
 			u8 r, g, b, a;
@@ -326,11 +326,11 @@ namespace vkr {
 
 		bool want_recreate;
 	public:
-		Renderer2D(VideoContext* video, Shader* shader, Bitmap** images, usize image_count, Framebuffer* framebuffer);
-		~Renderer2D();
+		VKR_API Renderer2D(VideoContext* video, Shader* shader, Bitmap** images, usize image_count, Framebuffer* framebuffer);
+		VKR_API ~Renderer2D();
 
-		void begin(v2i screen_size);
-		void end();
+		VKR_API void begin(v2i screen_size);
+		VKR_API void end();
 
 		struct Quad {
 			v2f position;
@@ -345,9 +345,9 @@ namespace vkr {
 			Bitmap* image;
 		};
 
-		void push(const Quad& quad);
-		void push(Font* font, const char* text, v2f position, v4f color = v4f(1.0f, 1.0f, 1.0f, 1.0f));
+		VKR_API void push(const Quad& quad);
+		VKR_API void push(Font* font, const char* text, v2f position, v4f color = v4f(1.0f, 1.0f, 1.0f, 1.0f));
 
-		void set_clip(Rect clip);
+		VKR_API void set_clip(Rect clip);
 	};
 }

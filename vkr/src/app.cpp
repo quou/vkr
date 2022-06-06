@@ -136,7 +136,7 @@ namespace vkr {
 	}
 
 	void App::run() {
-		srand(time(0));
+		srand(static_cast<u32>(time(0)));
 
 		handle = new impl_App();
 

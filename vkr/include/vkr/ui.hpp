@@ -10,7 +10,7 @@
 namespace vkr {
 	/* Simple immediate mode GUI, for basic tools and
 	 * for displaying debug information. */
-	class VKR_API UIContext {
+	class UIContext {
 	public:
 		enum class StyleVar : u32 {
 			padding = 0,
@@ -134,33 +134,33 @@ namespace vkr {
 
 		App* app;
 	public:
-		UIContext(App* app);
-		~UIContext();
+		VKR_API UIContext(App* app);
+		VKR_API ~UIContext();
 
-		void begin(v2i screen_size);
-		void end();
-		void draw(Renderer2D* renderer);
+		VKR_API void begin(v2i screen_size);
+		VKR_API void end();
+		VKR_API void draw(Renderer2D* renderer);
 
-		bool begin_window(const char* title, v2f default_position = v2f(30, 30), v2f default_size = v2f(500, 300));
-		void end_window();
+		VKR_API bool begin_window(const char* title, v2f default_position = v2f(30, 30), v2f default_size = v2f(500, 300));
+		VKR_API void end_window();
 
-		void use_font(Font* font, v4f color = v4f(1.0f, 1.0f, 1.0f, 1.0f));
+		VKR_API void use_font(Font* font, v4f color = v4f(1.0f, 1.0f, 1.0f, 1.0f));
 
-		void label(const char* text);
-		void text(const char* fmt, ...);
-		bool button(const char* text);
-		void linebreak();
-		void slider(f32* val, f32 min = 0.0, f32 max = 1.0);
+		VKR_API void label(const char* text);
+		VKR_API void text(const char* fmt, ...);
+		VKR_API bool button(const char* text);
+		VKR_API void linebreak();
+		VKR_API void slider(f32* val, f32 min = 0.0, f32 max = 1.0);
 
-		u64 next_item_id();
+		VKR_API u64 next_item_id();
 
-		void columns(usize count, ...);
+		VKR_API void columns(usize count, ...);
 
 		/* Advances the cursor position to the correct
 		 * place to draw the next element. `last_height'
 		 * describes the height of the last element
 		 * drawn before the call to `advance'. */
-		void advance(f32 last_height);
+		VKR_API void advance(f32 last_height);
 
 		inline void set_style_var(StyleVar v, f32 value) {
 			if (v >= StyleVar::count) { return; }
@@ -186,9 +186,9 @@ namespace vkr {
 			return style_colors[static_cast<u32>(v)];
 		}
 
-		bool rect_hovered(v2f position, v2f dimentions);
-		bool rect_overlap(v2f ap, v2f ad, v2f bp, v2f bd);
+		VKR_API bool rect_hovered(v2f position, v2f dimentions);
+		VKR_API bool rect_overlap(v2f ap, v2f ad, v2f bp, v2f bd);
 
-		bool any_windows_hovered();
+		VKR_API bool any_windows_hovered();
 	};
 }

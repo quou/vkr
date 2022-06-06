@@ -255,7 +255,7 @@ namespace vkr {
 		memset(vk_desc, 0, sizeof(VkVertexInputBindingDescription));
 
 		vk_desc->binding = 0;
-		vk_desc->stride = stride;
+		vk_desc->stride = static_cast<u32>(stride);
 		vk_desc->inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
 		for (usize i = 0; i < attrib_count; i++) {
@@ -266,7 +266,7 @@ namespace vkr {
 
 			vk_attrib->binding = 0;
 			vk_attrib->location = attrib->location;
-			vk_attrib->offset = attrib->offset;
+			vk_attrib->offset = static_cast<u32>(attrib->offset);
 
 			switch (attrib->type) {
 			case Pipeline::Attribute::Type::float1:
@@ -1074,7 +1074,7 @@ namespace vkr {
 		vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 		vertex_input_info.vertexBindingDescriptionCount = 1;
 		vertex_input_info.pVertexBindingDescriptions = &bind_desc;
-		vertex_input_info.vertexAttributeDescriptionCount = attrib_count;
+		vertex_input_info.vertexAttributeDescriptionCount = static_cast<u32>(attrib_count);
 		vertex_input_info.pVertexAttributeDescriptions = vk_attribs;
 
 		VkPipelineInputAssemblyStateCreateInfo input_assembly{};
@@ -1087,8 +1087,8 @@ namespace vkr {
 		VkViewport viewport{};
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
-		viewport.width  = scaled_fb_size.x;
-		viewport.height = scaled_fb_size.y;
+		viewport.width  = static_cast<f32>(scaled_fb_size.x);
+		viewport.height = static_cast<f32>(scaled_fb_size.y);
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 
@@ -1159,7 +1159,7 @@ namespace vkr {
 		color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 		color_blending.logicOpEnable = VK_FALSE;
 		color_blending.logicOp = VK_LOGIC_OP_COPY;
-		color_blending.attachmentCount = framebuffer->handle->color_count;
+		color_blending.attachmentCount = static_cast<u32>(framebuffer->handle->color_count);
 		color_blending.pAttachments = color_blend_attachments;
 
 		/* Count the descriptors of different types to create a descriptor pool. */
@@ -1206,9 +1206,9 @@ namespace vkr {
 		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		pool_info.poolSizeCount = (u32)pool_size_count;
 		pool_info.pPoolSizes = pool_sizes;
-		pool_info.maxSets =
+		pool_info.maxSets = static_cast<u32>(
 			(max_frames_in_flight * uniform_count) +
-			(max_frames_in_flight * sampler_count);
+			(max_frames_in_flight * sampler_count));
 
 		if (vkCreateDescriptorPool(video->handle->device, &pool_info, null, &handle->descriptor_pool) != VK_SUCCESS) {
 			abort_with("Failed to create the descriptor pool.");
@@ -1228,8 +1228,6 @@ namespace vkr {
 				auto desc = set->descriptors + ii;
 
 				auto lb = layout_bindings + ii;
-
-				VkDescriptorType type;
 
 				switch (desc->resource.type) {
 					case ResourcePointer::Type::texture:
@@ -1373,15 +1371,15 @@ namespace vkr {
 			pc_ranges[i].stageFlags = pcranges[i].stage == Stage::vertex ?
 				VK_SHADER_STAGE_VERTEX_BIT :
 				VK_SHADER_STAGE_FRAGMENT_BIT;
-			pc_ranges[i].offset = pcranges[i].start;
-			pc_ranges[i].size = pcranges[i].size;
+			pc_ranges[i].offset = static_cast<u32>(pcranges[i].start);
+			pc_ranges[i].size = static_cast<u32>(pcranges[i].size);
 		}
 
 		VkPipelineLayoutCreateInfo pipeline_layout_info{};
 		pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipeline_layout_info.setLayoutCount = (u32)desc_set_count;
 		pipeline_layout_info.pSetLayouts = set_layouts;
-		pipeline_layout_info.pushConstantRangeCount = pcrange_count;
+		pipeline_layout_info.pushConstantRangeCount = static_cast<u32>(pcrange_count);
 		pipeline_layout_info.pPushConstantRanges = pc_ranges;
 
 		if (vkCreatePipelineLayout(video->handle->device, &pipeline_layout_info, null, &handle->pipeline_layout) != VK_SUCCESS) {
@@ -1518,17 +1516,17 @@ namespace vkr {
 		}
 #endif
 		vkCmdPushConstants(video->handle->command_buffers[video->current_frame], handle->pipeline_layout,
-		stage == Stage::vertex ?
-			VK_SHADER_STAGE_VERTEX_BIT :
-			VK_SHADER_STAGE_FRAGMENT_BIT,
-		offset, size, ptr);
+			stage == Stage::vertex ?
+				VK_SHADER_STAGE_VERTEX_BIT :
+				VK_SHADER_STAGE_FRAGMENT_BIT,
+			static_cast<u32>(offset), static_cast<u32>(size), ptr);
 	}
 
 	void Pipeline::bind_descriptor_set(usize target, usize index) {
 		if (video->skip_frame) { return; }
 
 		vkCmdBindDescriptorSets(video->handle->command_buffers[video->current_frame], VK_PIPELINE_BIND_POINT_GRAPHICS,
-			handle->pipeline_layout, target, 1,
+			handle->pipeline_layout, static_cast<u32>(target), 1,
 			handle->desc_sets[index].sets + video->current_frame, 0, null);
 	}
 
@@ -1605,7 +1603,7 @@ namespace vkr {
 					ca_descs[idx].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 				}
 
-				ca_refs[idx].attachment = i;
+				ca_refs[idx].attachment = static_cast<u32>(i);
 				ca_refs[idx].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 			}
 		}
@@ -1648,12 +1646,12 @@ namespace vkr {
 		depth_attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 		VkAttachmentReference depth_attachment_ref{};
-		depth_attachment_ref.attachment = depth_index;
+		depth_attachment_ref.attachment = static_cast<u32>(depth_index);
 		depth_attachment_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 		VkSubpassDescription subpass{};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		subpass.colorAttachmentCount = color_attachment_count;
+		subpass.colorAttachmentCount = static_cast<u32>(color_attachment_count);
 		subpass.pColorAttachments = color_attachment_count > 0 ? ca_refs : null;
 
 		if (use_depth) {
@@ -1727,7 +1725,7 @@ namespace vkr {
 		render_pass_info.pAttachments = v_attachments;
 		render_pass_info.subpassCount = 1;
 		render_pass_info.pSubpasses = &subpass;
-		render_pass_info.dependencyCount = dep_count;
+		render_pass_info.dependencyCount = static_cast<u32>(dep_count);
 		render_pass_info.pDependencies = deps;
 
 		if (vkCreateRenderPass(video->handle->device, &render_pass_info, null, &handle->render_pass)) {
@@ -1792,7 +1790,8 @@ namespace vkr {
 
 				for (u32 i = 0; i < max_frames_in_flight; i++) {
 					new_depth_resources(video->handle, &handle->depth.images[i],
-						&handle->depth.image_views[i], &handle->depth.image_memories[i], size * scale, true);
+						&handle->depth.image_views[i], &handle->depth.image_memories[i],
+							v2i(static_cast<i32>(size.x * scale), static_cast<i32>(size.y * scale)), true);
 					handle->depth.type = Attachment::Type::depth;
 				}
 			}
@@ -1822,7 +1821,7 @@ namespace vkr {
 				VkFramebufferCreateInfo fb_info{};
 				fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 				fb_info.renderPass = handle->render_pass;
-				fb_info.attachmentCount = attachment_count;
+				fb_info.attachmentCount = static_cast<u32>(attachment_count);
 				fb_info.pAttachments = image_attachments;
 				fb_info.width =  (u32)((f32)size.x * scale);
 				fb_info.height = (u32)((f32)size.y * scale);
@@ -1951,7 +1950,7 @@ namespace vkr {
 		render_pass_info.framebuffer = handle->get_current_framebuffer(video->image_id, video->current_frame);
 		render_pass_info.renderArea.offset = { 0, 0 };
 		render_pass_info.renderArea.extent = VkExtent2D { (u32)get_drawable_size().x, (u32)get_drawable_size().y };
-		render_pass_info.clearValueCount = handle->clear_color_count;
+		render_pass_info.clearValueCount = static_cast<u32>(handle->clear_color_count);
 		render_pass_info.pClearValues = handle->clear_colors;
 
 		vkCmdBeginRenderPass(video->handle->command_buffers[video->current_frame], &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
@@ -2071,7 +2070,7 @@ namespace vkr {
 	void VertexBuffer::draw(usize count, usize offset) {
 		if (video->skip_frame) { return; }
 
-		vkCmdDraw(video->handle->command_buffers[video->current_frame], count, 1, offset, 0);
+		vkCmdDraw(video->handle->command_buffers[video->current_frame], static_cast<u32>(count), 1, static_cast<u32>(offset), 0);
 	}
 
 	void VertexBuffer::update(void* verts, usize size, usize offset) {
@@ -2118,7 +2117,7 @@ namespace vkr {
 		if (video->skip_frame) { return; }
 
 		vkCmdBindIndexBuffer(video->handle->command_buffers[video->current_frame], handle->buffer, 0, VK_INDEX_TYPE_UINT16);
-		vkCmdDrawIndexed(video->handle->command_buffers[video->current_frame], count, 1, 0, 0, 0);
+		vkCmdDrawIndexed(video->handle->command_buffers[video->current_frame], static_cast<u32>(count), 1, 0, 0, 0);
 
 		video->object_count++;
 	}
@@ -2283,7 +2282,7 @@ namespace vkr {
 
 		v2i size;
 		i32 channels;
-		void* data = stbi_load_from_memory(raw_data, raw_size, &size.x, &size.y, &channels, 4);
+		void* data = stbi_load_from_memory(raw_data, static_cast<i32>(raw_size), &size.x, &size.y, &channels, 4);
 		if (!data) {
 			error("Failed to load `%s': %s.", file_path, stbi_failure_reason());
 			return null;

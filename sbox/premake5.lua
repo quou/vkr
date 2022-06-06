@@ -39,6 +39,11 @@ project "sbox"
 			"cd ..\\ && bin\\packer.exe res bin\\sbox.exe"
 		}
 
+	filter "system:windows"
+		defines {
+			"_CRT_SECURE_NO_WARNINGS"
+		}
+
 	filter "configurations:debug"
 		runtime "debug"
 		symbols "on"

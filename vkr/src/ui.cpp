@@ -145,7 +145,7 @@ namespace vkr {
 
 					if (!dragging && !anything_hovered && !anything_hot) {
 						dragging = win->id;
-						drag_offset = v2f(app->mouse_pos.x, app->mouse_pos.y) - win->position;
+						drag_offset = v2f(static_cast<f32>(app->mouse_pos.x), static_cast<f32>(app->mouse_pos.y)) - win->position;
 					}
 				}
 
@@ -267,7 +267,7 @@ namespace vkr {
 		cursor_pos = window->position + window->content_offset;
 
 		if (dragging == id) {
-			window->position = v2f(app->mouse_pos.x, app->mouse_pos.y) - drag_offset;
+			window->position = v2f(static_cast<f32>(app->mouse_pos.x), static_cast<f32>(app->mouse_pos.y)) - drag_offset;
 		}
 
 		columns(1, 1.0f);

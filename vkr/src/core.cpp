@@ -102,13 +102,13 @@ namespace vkr {
 		fseek(packer.file, 0, SEEK_END);
 		packer.self_size = ftell(packer.file);
 
-		fseek(packer.file, packer.self_size - sizeof(u64), SEEK_SET);
+		fseek(packer.file, static_cast<long>(packer.self_size - sizeof(u64)), SEEK_SET);
 
 		fread(&packer.pack_size, 1, sizeof(u64), packer.file);
 
 		packer.pack_offset = packer.self_size - packer.pack_size - sizeof(u64);
 
-		fseek(packer.file, packer.pack_offset, SEEK_SET);
+		fseek(packer.file, static_cast<long>(packer.pack_offset), SEEK_SET);
 		fread(&packer.header.table_offset, 1, sizeof(u64), packer.file);
 		fread(&packer.header.table_count,  1, sizeof(u64), packer.file);
 		fread(&packer.header.path_offset,  1, sizeof(u64), packer.file);
@@ -142,7 +142,7 @@ namespace vkr {
 #else
 		/* Search for the file in the package. */
 		for (u64 i = 0; i < packer.header.table_count; i++) {
-			fseek(packer.file, packer.pack_offset + packer.header.table_offset + (i * sizeof(u64) * 5), SEEK_SET);
+			fseek(packer.file, static_cast<long>(packer.pack_offset + packer.header.table_offset + (i * sizeof(u64) * 5)), SEEK_SET);
 
 			u64 path_hash, path_offset, blob_offset, blob_size, path_size;
 
@@ -153,13 +153,13 @@ namespace vkr {
 			fread(&path_size,   sizeof(u64), 1, packer.file);
 
 			char name[1024];
-			fseek(packer.file, packer.pack_offset + packer.header.path_offset + path_offset, SEEK_SET);
+			fseek(packer.file, static_cast<long>(packer.pack_offset + packer.header.path_offset + path_offset), SEEK_SET);
 			fread(name, 1, path_size, packer.file);
 			name[path_size] = '\0';
 
 			if (strcmp(path, name) == 0) {
 				*buffer = new u8[blob_size];
-				fseek(packer.file, packer.pack_offset + packer.header.blob_offset + blob_offset, SEEK_SET);
+				fseek(packer.file, static_cast<long>(packer.pack_offset + packer.header.blob_offset + blob_offset), SEEK_SET);
 				fread(*buffer, 1, blob_size, packer.file);
 
 				if (size) {

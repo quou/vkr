@@ -74,7 +74,7 @@ namespace vkr {
 		auto sampler_descs = new Pipeline::Descriptor[dependency_count]();
 		for (usize i = 0; i < dependency_count; i++) {
 			sampler_descs[i].name = "input";
-			sampler_descs[i].binding = i;
+			sampler_descs[i].binding = static_cast<u32>(i);
 			sampler_descs[i].stage = Pipeline::Stage::fragment;
 			sampler_descs[i].resource.type = Pipeline::ResourcePointer::Type::framebuffer_output;
 			sampler_descs[i].resource.framebuffer.ptr = dependencies[i].framebuffer;
@@ -665,7 +665,7 @@ namespace vkr {
 					pos    == verts[i].position &&
 					normal == verts[i].normal &&
 					uv     == verts[i].uv) {
-					indices[index_count++] = i;
+					indices[index_count++] = static_cast<u16>(i);
 					is_new = false;
 				}
 			}
@@ -674,7 +674,7 @@ namespace vkr {
 				verts[vert_count].position = pos;
 				verts[vert_count].normal = normal;
 				verts[vert_count].uv = uv;
-				indices[index_count++] = vert_count;
+				indices[index_count++] = static_cast<u16>(vert_count);
 				vert_count++;
 			}
 		}
@@ -767,7 +767,7 @@ namespace vkr {
 		}
 
 		i32 w, h, channels;
-		void* data = stbi_load_from_memory(raw_data, raw_size, &w, &h, &channels, 4);
+		void* data = stbi_load_from_memory(raw_data, static_cast<i32>(raw_size), &w, &h, &channels, 4);
 		if (!data) {
 			error("Failed to load `%s': %s.", path, stbi_failure_reason());
 			return null;
@@ -896,7 +896,7 @@ namespace vkr {
 		i32 ascent, descent, linegap;
 		stbtt_GetFontVMetrics(&handle->info, &ascent, &descent, &linegap);
 		f32 scale = stbtt_ScaleForMappingEmToPixels(&handle->info, size);
-		handle->height = (i32)((ascent - descent + linegap) * scale + 0.5f);
+		handle->height = (ascent - descent + linegap) * scale + 0.5f;
 
 		stbtt_bakedchar* g = reinterpret_cast<GlyphSet*>(get_glyph_set('\n'))->glyphs;
 		g['\t'].x1 = g['\t'].x0;
