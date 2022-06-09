@@ -58,7 +58,7 @@ namespace vkr {
 		printf("warning ");
 		SetConsoleTextAttribute(console, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
 #else
-		printf("\033[31;31mwarning \033[0m");
+		printf("\033[31;35mwarning \033[0m");
 #endif
 		vprintf(fmt, args);
 		printf("\n");
@@ -71,7 +71,7 @@ namespace vkr {
 		printf("info ");
 		SetConsoleTextAttribute(console, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
 #else
-		printf("\033[31;31minfo \033[0m");
+		printf("\033[31;32minfo \033[0m");
 #endif
 		vprintf(fmt, args);
 		printf("\n");
